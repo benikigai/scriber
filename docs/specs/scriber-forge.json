@@ -1,0 +1,66 @@
+[
+  {
+    "id": 0,
+    "category": "simple",
+    "description": "Pre-flight: brew install --cask blackhole-2ch, create Multi-Output Device (BlackHole + Built-in Speakers) in Audio MIDI Setup, populate .env.local with OPENAI_API_KEY, LINEAR_API_KEY (BenIkigai), SLACK_WEBHOOK_URL from 1Password Clawdbot vault. No code changes.",
+    "verify": "test -f .env.local && bun -e \"const r = await fetch('https://api.linear.app/graphql', {method:'POST', headers:{'Authorization': process.env.LINEAR_API_KEY, 'Content-Type':'application/json'}, body: JSON.stringify({query:'{ viewer { name email } }'})}); const j = await r.json(); if (!j.data?.viewer?.email) process.exit(1)\"",
+    "passes": false,
+    "skipped": false
+  },
+  {
+    "id": 1,
+    "category": "moderate",
+    "description": "Fork openai/openai-realtime-agents into ~/code/scriber/ (squash into existing repo), add src/app/agentConfigs/scriber.ts with cedar voice + gpt-realtime-2 + facilitator system prompt. Browser mic = BlackHole, speaker = Multi-Output Device. Verify Scriber responds to spoken input under 1.5s latency with no feedback loop.",
+    "verify": "bun dev & sleep 8 && curl -fsS http://localhost:3000 | grep -q 'Scriber' && pkill -f 'bun dev'",
+    "passes": false,
+    "skipped": false
+  },
+  {
+    "id": 2,
+    "category": "moderate",
+    "description": "Wire 5 Linear tools as Next.js API routes under src/app/api/tools/linear/ (search, get, create, update, comment) using @linear/sdk GraphQL. Expose to Scriber via tool definitions in src/app/agentConfigs/scriber.ts. Test each via voice end-to-end.",
+    "verify": "bun -e \"const {LinearClient} = require('@linear/sdk'); const c = new LinearClient({apiKey: process.env.LINEAR_API_KEY}); const v = await c.viewer; if (!v.email) process.exit(1)\"",
+    "passes": false,
+    "skipped": false
+  },
+  {
+    "id": 3,
+    "category": "moderate",
+    "description": "Implement wake-word state machine (ALWAYS_ON | LISTENING_FOR_WAKE | ACTIVE | QUIET) in src/lib/modeMachine.ts. Substring-match on recent Realtime transcript tokens. Gate TTS by state. Add src/app/components/ModeIndicator.tsx UI badge. KILL-SWITCH: if flaky at 25-min mark, ship ALWAYS_ON + UI mute button only.",
+    "verify": "test -f src/lib/modeMachine.ts && test -f src/app/components/ModeIndicator.tsx && grep -q 'ALWAYS_ON' src/lib/modeMachine.ts && grep -q 'QUIET' src/lib/modeMachine.ts",
+    "passes": false,
+    "skipped": false
+  },
+  {
+    "id": 4,
+    "category": "complex",
+    "description": "Build Mnemo sidecar: mnemo/index.ts Bun process running text-only Realtime as supervisor. Subscribes to live transcript via WS from Next.js at src/app/api/whispers/route.ts. Preload mnemo/memory.json with 5 mock prior-standup recaps. Mnemo emits whisper_to_scriber(message) over WS; src/lib/whisperBus.ts injects into Scriber input. KILL-SWITCH: if dual-session flaky at 25-min mark, ship single-agent.",
+    "verify": "test -f mnemo/index.ts && test -f mnemo/memory.json && test -f src/lib/whisperBus.ts && test -f src/app/api/whispers/route.ts",
+    "passes": false,
+    "skipped": false
+  },
+  {
+    "id": 5,
+    "category": "moderate",
+    "description": "Wire generate_diagram tool in src/app/api/tools/diagram/route.ts. Call gpt-image-1 with quality=low, format=jpeg. Decode base64. Run Linear 3-step attachment: fileUpload (size, filename, contentType) GraphQL → PUT bytes to uploadUrl with returned headers → attachmentCreate(input: { issueId, title, url: assetUrl }) GraphQL. Implement in src/lib/linearAttach.ts. Pre-stage public/fallback-diagram.png for 429 path.",
+    "verify": "test -f src/app/api/tools/diagram/route.ts && test -f src/lib/linearAttach.ts && test -f public/fallback-diagram.png",
+    "passes": false,
+    "skipped": false
+  },
+  {
+    "id": 6,
+    "category": "moderate",
+    "description": "Add slack.post_message tool at src/app/api/tools/slack/route.ts via Slack incoming webhook. Build 3-panel demo UI: TranscriptPanel (with mode badge), ToolCallCard (status pending/done/failed), Linear board opens in 2nd browser window. Layout must be screen-recording-ready (no dev banners, no console errors).",
+    "verify": "test -f src/app/api/tools/slack/route.ts && test -f src/app/components/TranscriptPanel.tsx && test -f src/app/components/ToolCallCard.tsx",
+    "passes": false,
+    "skipped": false
+  },
+  {
+    "id": 7,
+    "category": "simple",
+    "description": "Dress rehearsal: full 3-min demo run covering standup open → live Linear update → diagram generation → Mnemo whisper → quiet mode demo → Slack recap. Record via QuickTime or OBS. Watch end-to-end. Submit to OpenAI Voice Hack Night by 6:30 PM PDT 2026-05-27.",
+    "verify": "test -f demo.mp4 || test -f demo.mov",
+    "passes": false,
+    "skipped": false
+  }
+]
