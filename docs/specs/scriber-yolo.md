@@ -1,7 +1,7 @@
 # Yolo: Scriber + Mnemo
 **Spec:** docs/specs/scriber.md
 
-- [ ] Task 0: Pre-flight — install BlackHole, audio routing, key verification — SIMPLE
+- [x] Task 0: Pre-flight — install BlackHole, audio routing, key verification — SIMPLE (BlackHole install deferred to user)
 - [ ] Task 1: Scaffold — fork openai-realtime-agents, Scriber agent end-to-end — MODERATE
 - [ ] Task 2: Linear tools (read + write, excl. attachments) — MODERATE
 - [ ] Task 3: Wake-word state machine (kill-switch at 25min) — MODERATE
