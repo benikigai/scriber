@@ -1,0 +1,34 @@
+{
+  "standups": [
+    {
+      "date": "2026-05-20",
+      "summary": "Ben demo'd the early gateway routing. Latency was 380ms p95 — flagged as needing a spike. Ben committed to spiking it within the week. Vishal raised a concern about the chunking strategy in ingest, no action taken.",
+      "owners": { "gateway_latency_spike": "Ben" },
+      "open_threads": ["gateway latency 380ms"]
+    },
+    {
+      "date": "2026-05-22",
+      "summary": "Ben mentioned the latency issue is still unresolved — hasn't started spike yet. Chow demo'd new hero image draft, Alex (designer) said needs another pass. Vishal asked about the Linear MCP OAuth bug; we agreed it's blocking the standup-agent demo.",
+      "owners": { "linear_mcp_oauth": "Vishal", "hero_image_redo": "Chow" },
+      "open_threads": ["gateway latency 380ms", "Linear MCP OAuth bug"]
+    },
+    {
+      "date": "2026-05-24",
+      "summary": "Alex left Injester — Vishal is taking over CTO duties fully. Linear MCP OAuth confirmed fixed in non-Safari browsers. Hero image redo still open with Chow waiting on Alex's replacement art. Gateway latency still not spiked.",
+      "owners": { "hero_image_redo": "Chow", "gateway_latency_spike": "Ben" },
+      "open_threads": ["gateway latency 380ms", "hero_image_redo"]
+    },
+    {
+      "date": "2026-05-25",
+      "summary": "Ben started the gateway spike — Railway vs Hetzner comparison. Vishal flagged we need to decide on infra by Friday. No movement on hero image.",
+      "owners": { "infra_decision": "Ben" },
+      "open_threads": ["infra decision Friday", "gateway latency 380ms", "hero_image_redo"]
+    },
+    {
+      "date": "2026-05-26",
+      "summary": "Vishal asked about hackathon prep — we're targeting OpenAI Voice Hack tomorrow night. Ben to build the standup agent (Scriber). Gateway latency still unresolved — Ben pushed it to next week given hackathon focus.",
+      "owners": { "scriber_build": "Ben", "infra_decision": "Ben" },
+      "open_threads": ["gateway latency 380ms (deferred)", "hero_image_redo"]
+    }
+  ]
+}
