@@ -67,16 +67,25 @@ const createIssue = tool({
   },
 });
 
-// Tool: Linear update (status, etc.)
+// Tool: Linear update (status, assignee, priority, title)
 const updateIssue = tool({
   name: 'linear_update_issue',
-  description: 'Update an existing Linear issue. Set state by name (e.g. "In Progress", "Done", "Blocked").',
+  description:
+    'Update an existing Linear issue. Set state by name ("In Progress", "Done", "Blocked"), reassign by email or display name, change priority (0=none, 1=urgent, 2=high, 3=medium, 4=low), or rename. Pass only the fields you want to change.',
   parameters: {
     type: 'object',
     properties: {
       id: { type: 'string', description: 'Issue identifier like BEN-12' },
-      state: { type: 'string', description: 'Optional state name' },
+      state: { type: 'string', description: 'Optional state name, e.g. "In Progress"' },
       title: { type: 'string', description: 'Optional new title' },
+      assignee: {
+        type: 'string',
+        description: 'Optional new assignee: email, display name, or "me". Pass empty string to unassign.',
+      },
+      priority: {
+        type: 'number',
+        description: 'Optional priority. 0=none, 1=urgent, 2=high, 3=medium, 4=low.',
+      },
     },
     required: ['id'],
     additionalProperties: false,

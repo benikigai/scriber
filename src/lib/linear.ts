@@ -11,6 +11,31 @@ export function linear() {
   return _client;
 }
 
+/** Resolve a Linear user ID from an email, display name, full name, or "me".
+ *  Returns null if no match. Caches resolved lookups for the process lifetime. */
+const _userCache = new Map<string, string | null>();
+export async function resolveUserId(query: string): Promise<string | null> {
+  const key = query.trim().toLowerCase();
+  if (!key) return null;
+  if (_userCache.has(key)) return _userCache.get(key)!;
+  const client = linear();
+  if (key === 'me') {
+    const me = await client.viewer;
+    _userCache.set(key, me.id);
+    return me.id;
+  }
+  const users = await client.users();
+  const match = users.nodes.find((u) => {
+    const email = u.email?.toLowerCase() ?? '';
+    const display = u.displayName?.toLowerCase() ?? '';
+    const name = u.name?.toLowerCase() ?? '';
+    return email === key || display === key || name === key;
+  });
+  const id = match?.id ?? null;
+  _userCache.set(key, id);
+  return id;
+}
+
 /** Resolve the Linear team for new issues.
  *  Prefers env LINEAR_TEAM_KEY (e.g. "BEN"), falls back to the first team. */
 export function defaultTeamId(): Promise<string> {
