@@ -8,6 +8,134 @@ import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { DownloadIcon, ClipboardCopyIcon } from "@radix-ui/react-icons";
 import { GuardrailChip } from "./GuardrailChip";
 
+// ── Tool-call card helpers ──────────────────────────────────────────────────
+// Tool-call breadcrumbs arrive as titles like:
+//   "function call: linear_update_issue"   (start, with args in data)
+//   "function call result: linear_update_issue"  (end, with result in data)
+// We render each as a colored card so the demo viewer can see the agent acting.
+type ToolFamily = {
+  label: string;
+  pillBg: string;
+  pillText: string;
+  cardBg: string;
+  cardBorder: string;
+  accent: string; // for the ring/pulse and the side bar
+};
+
+function getToolFamily(toolName: string): ToolFamily {
+  if (toolName.startsWith("linear_")) {
+    return {
+      label: "LINEAR",
+      pillBg: "bg-blue-600",
+      pillText: "text-white",
+      cardBg: "bg-blue-50",
+      cardBorder: "border-blue-200",
+      accent: "text-blue-500",
+    };
+  }
+  if (toolName === "generate_diagram") {
+    return {
+      label: "DIAGRAM",
+      pillBg: "bg-purple-600",
+      pillText: "text-white",
+      cardBg: "bg-purple-50",
+      cardBorder: "border-purple-200",
+      accent: "text-purple-500",
+    };
+  }
+  if (toolName === "post_slack_recap") {
+    return {
+      label: "SLACK",
+      pillBg: "bg-emerald-600",
+      pillText: "text-white",
+      cardBg: "bg-emerald-50",
+      cardBorder: "border-emerald-200",
+      accent: "text-emerald-500",
+    };
+  }
+  if (toolName === "consult_mnemo") {
+    return {
+      label: "MNEMO",
+      pillBg: "bg-amber-500",
+      pillText: "text-white",
+      cardBg: "bg-amber-50",
+      cardBorder: "border-amber-200",
+      accent: "text-amber-500",
+    };
+  }
+  return {
+    label: "TOOL",
+    pillBg: "bg-gray-700",
+    pillText: "text-white",
+    cardBg: "bg-gray-50",
+    cardBorder: "border-gray-200",
+    accent: "text-gray-500",
+  };
+}
+
+function parseToolBreadcrumb(title: string): { kind: "start" | "result"; toolName: string } | null {
+  const startMatch = title.match(/^function call:\s*(.+)$/i);
+  if (startMatch) return { kind: "start", toolName: startMatch[1].trim() };
+  const resultMatch = title.match(/^function call result:\s*(.+)$/i);
+  if (resultMatch) return { kind: "result", toolName: resultMatch[1].trim() };
+  return null;
+}
+
+function ToolCard({
+  kind,
+  toolName,
+  timestamp,
+  data,
+}: {
+  kind: "start" | "result";
+  toolName: string;
+  timestamp: string;
+  data: Record<string, any> | undefined;
+}) {
+  const fam = getToolFamily(toolName);
+  const isResult = kind === "result";
+  return (
+    <div
+      className={`tool-card-enter w-full max-w-2xl rounded-lg border ${fam.cardBorder} ${fam.cardBg} ${fam.accent}`}
+    >
+      <div className="flex items-center gap-2 px-3 py-2">
+        <span
+          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider font-mono ${fam.pillBg} ${fam.pillText}`}
+        >
+          {fam.label}
+        </span>
+        <span className="font-mono text-[13px] font-medium text-gray-800 flex-1 truncate">
+          {toolName}
+        </span>
+        <span className="inline-flex items-center gap-1 text-[11px] font-mono">
+          {isResult ? (
+            <>
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" className="text-emerald-600">
+                <path d="M2 6.5L4.5 9L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="text-emerald-700 font-semibold">done</span>
+            </>
+          ) : (
+            <>
+              <span className={`tool-dot-pulse inline-block w-1.5 h-1.5 rounded-full ${fam.accent.replace("text-", "bg-")}`} />
+              <span className={`${fam.accent.replace("500", "700")} font-semibold`}>running…</span>
+            </>
+          )}
+        </span>
+        <span className="text-[10px] text-gray-400 font-mono">{timestamp}</span>
+      </div>
+      {data !== undefined && (
+        <div className={`border-t ${fam.cardBorder} px-3 py-2`}>
+          <pre className="font-mono text-[11px] leading-relaxed text-gray-700 whitespace-pre-wrap break-words max-h-48 overflow-auto">
+            {typeof data === "string" ? data : JSON.stringify(data, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 export interface TranscriptProps {
   userText: string;
   setUserText: (val: string) => void;
@@ -162,6 +290,19 @@ function Transcript({
                 </div>
               );
             } else if (type === "BREADCRUMB") {
+              const toolMeta = parseToolBreadcrumb(title);
+              if (toolMeta) {
+                return (
+                  <div key={itemId} className="flex justify-start">
+                    <ToolCard
+                      kind={toolMeta.kind}
+                      toolName={toolMeta.toolName}
+                      timestamp={timestamp}
+                      data={data}
+                    />
+                  </div>
+                );
+              }
               return (
                 <div
                   key={itemId}
