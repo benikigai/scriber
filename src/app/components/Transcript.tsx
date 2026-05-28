@@ -5,7 +5,8 @@ import ReactMarkdown from "react-markdown";
 import { TranscriptItem } from "@/app/types";
 import Image from "next/image";
 import { useTranscript } from "@/app/contexts/TranscriptContext";
-import { DownloadIcon, ClipboardCopyIcon } from "@radix-ui/react-icons";
+import { useEvent } from "@/app/contexts/EventContext";
+import { DownloadIcon, ClipboardCopyIcon, TrashIcon } from "@radix-ui/react-icons";
 import { GuardrailChip } from "./GuardrailChip";
 
 // ── Tool-call card helpers ──────────────────────────────────────────────────
@@ -151,11 +152,20 @@ function Transcript({
   canSend,
   downloadRecording,
 }: TranscriptProps) {
-  const { transcriptItems, toggleTranscriptItemExpand } = useTranscript();
+  const { transcriptItems, toggleTranscriptItemExpand, clearTranscript } = useTranscript();
+  const { clearEvents } = useEvent();
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const [prevLogs, setPrevLogs] = useState<TranscriptItem[]>([]);
   const [justCopied, setJustCopied] = useState(false);
+  const [justCleared, setJustCleared] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleClearSession = () => {
+    clearTranscript();
+    clearEvents();
+    setJustCleared(true);
+    setTimeout(() => setJustCleared(false), 1200);
+  };
 
   function scrollToBottom() {
     if (transcriptRef.current) {
@@ -204,6 +214,18 @@ function Transcript({
         <div className="flex items-center justify-between px-6 py-3 sticky top-0 z-10 text-base border-b bg-white rounded-t-xl">
           <span className="font-semibold">Transcript</span>
           <div className="flex gap-x-2">
+            <button
+              onClick={handleClearSession}
+              title="Clear transcript + event log (does not disconnect)"
+              className={`w-28 text-sm px-3 py-1 rounded-md flex items-center justify-center gap-x-1 transition-colors ${
+                justCleared
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-gray-200 hover:bg-red-100 hover:text-red-700"
+              }`}
+            >
+              <TrashIcon />
+              {justCleared ? "Cleared" : "Clear"}
+            </button>
             <button
               onClick={handleCopyTranscript}
               className="w-24 text-sm px-3 py-1 rounded-md bg-gray-200 hover:bg-gray-300 flex items-center justify-center gap-x-1"

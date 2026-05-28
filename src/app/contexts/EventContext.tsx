@@ -10,6 +10,7 @@ type EventContextValue = {
   logServerEvent: (eventObj: Record<string, any>, eventNameSuffix?: string) => void;
   logHistoryItem: (item: any) => void;
   toggleExpand: (id: number | string) => void;
+  clearEvents: () => void;
 };
 
 const EventContext = createContext<EventContextValue | undefined>(undefined);
@@ -64,10 +65,14 @@ export const EventProvider: FC<PropsWithChildren> = ({ children }) => {
     );
   };
 
+  const clearEvents: EventContextValue['clearEvents'] = () => {
+    setLoggedEvents([]);
+  };
+
 
   return (
     <EventContext.Provider
-      value={{ loggedEvents, logClientEvent, logServerEvent, logHistoryItem, toggleExpand }}
+      value={{ loggedEvents, logClientEvent, logServerEvent, logHistoryItem, toggleExpand, clearEvents }}
     >
       {children}
     </EventContext.Provider>
