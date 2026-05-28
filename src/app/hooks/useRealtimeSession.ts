@@ -3,6 +3,7 @@ import {
   RealtimeSession,
   RealtimeAgent,
   OpenAIRealtimeWebRTC,
+  OpenAIRealtimeWebSocket,
 } from '@openai/agents/realtime';
 
 import { applyCodecPreferences } from '../lib/codecUtils';
@@ -125,16 +126,21 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
       const ek = await getEphemeralKey();
       const rootAgent = initialAgents[0];
 
+      // Default to WebRTC (lower latency, better audio). Allow ?transport=ws as fallback.
+      void OpenAIRealtimeWebSocket;
+      const useWs = typeof window !== 'undefined'
+        && new URLSearchParams(window.location.search).get('transport') === 'ws';
       sessionRef.current = new RealtimeSession(rootAgent, {
-        transport: new OpenAIRealtimeWebRTC({
-          audioElement,
-          // Set preferred codec before offer creation
-          changePeerConnection: async (pc: RTCPeerConnection) => {
-            applyCodec(pc);
-            return pc;
-          },
-        }),
-        model: 'gpt-4o-realtime-preview-2025-06-03',
+        transport: useWs
+          ? new OpenAIRealtimeWebSocket({})
+          : new OpenAIRealtimeWebRTC({
+              audioElement,
+              changePeerConnection: async (pc: RTCPeerConnection) => {
+                applyCodec(pc);
+                return pc;
+              },
+            }),
+        model: 'gpt-realtime-2',
         config: {
           inputAudioTranscription: {
             model: 'gpt-4o-mini-transcribe',

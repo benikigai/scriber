@@ -197,7 +197,7 @@ function App() {
   };
 
   const connectToRealtime = async () => {
-    const agentSetKey = searchParams.get("agentConfig") || "default";
+    const agentSetKey = searchParams.get("agentConfig") || defaultAgentSetKey;
     if (sdkScenarioMap[agentSetKey]) {
       if (sessionStatus !== "DISCONNECTED") return;
       setSessionStatus("CONNECTING");
@@ -433,7 +433,7 @@ function App() {
     };
   }, [sessionStatus]);
 
-  const agentSetKey = searchParams.get("agentConfig") || "default";
+  const agentSetKey = searchParams.get("agentConfig") || defaultAgentSetKey;
 
   return (
     <div className="text-base flex flex-col h-screen bg-gray-100 text-gray-800 relative">
@@ -453,7 +453,14 @@ function App() {
             {sessionStatus === 'CONNECTED' ? 'LIVE' : sessionStatus === 'CONNECTING' ? 'connecting…' : 'idle'}
           </span>
           <span className="hidden md:inline text-gray-400">·</span>
-          <span className="hidden md:inline">Linear · BenIkigai (BEN)</span>
+          <a
+            href="https://linear.app/benikigai/team/BEN/active"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden md:inline text-gray-600 hover:text-black underline-offset-2 hover:underline"
+          >
+            Linear · BenIkigai (BEN) ↗
+          </a>
         </div>
       </div>
 

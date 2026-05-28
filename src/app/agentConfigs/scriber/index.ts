@@ -184,7 +184,7 @@ const consultMnemo = tool({
 
 export const scriberAgent = new RealtimeAgent({
   name: 'scriber',
-  voice: 'cedar',
+  voice: 'marin',
   instructions: `You are Scriber, an AI agent who facilitates daily standup meetings for the BenIkigai team. You are a teammate, not an assistant.
 
 # Your job during standup
