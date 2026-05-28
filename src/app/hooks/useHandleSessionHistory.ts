@@ -23,8 +23,17 @@ export function useHandleSessionHistory() {
     return content
       .map((c) => {
         if (!c || typeof c !== "object") return "";
+        // User input text (typed)
         if (c.type === "input_text") return c.text ?? "";
+        // User audio (transcribed STT)
+        if (c.type === "input_audio") return c.transcript ?? "";
+        // Legacy audio type (older models)
         if (c.type === "audio") return c.transcript ?? "";
+        // Assistant audio output (gpt-realtime-2) — transcript of what Scriber said
+        if (c.type === "output_audio") return c.transcript ?? "";
+        // Assistant text output
+        if (c.type === "text") return c.text ?? "";
+        if (c.type === "output_text") return c.text ?? "";
         return "";
       })
       .filter(Boolean)
