@@ -2,37 +2,46 @@
 
 > Submission target: OpenAI Voice Hack Night, 2026-05-27 6:30 PM PDT.
 
-## Two recording paths
+## Recording setup (MBP via SSH tunnel — chosen path)
 
-### Path A — Direct browser demo (simplest, no BlackHole)
+`bun dev` runs on the **Mac Mini Elias** (`100.85.105.99`). You record from the **MBP** via an SSH port-forward, so the MBP browser becomes the recording surface.
 
-Talk to Scriber in the browser at `localhost:3002` while screen-recording. No Meet, no audio bridge needed. The demo is *Scriber updating Linear live*, which is fully visible in the screen recording.
+The URL bar will show `usescriber.com:3000` thanks to a `/etc/hosts` rewrite on the MBP. Domain rebrand is cosmetic — the traffic still tunnels to the Mini's localhost.
 
-1. Run the app:
-   ```bash
-   cd ~/code/scriber
-   bun dev
-   ```
-2. Open `http://localhost:3002` in Chrome.
-3. In the agent dropdown, select **scriber** (it should be default).
-4. Click **Connect**.
-5. Open `https://linear.app/benikigai/team/BEN/active` in a 2nd window (side-by-side with the browser).
-6. Start screen recording with QuickTime or OBS (Cmd+Shift+5 → "Record Selected Portion"). Capture both windows + microphone audio.
-7. Run through the script below.
+### One-time MBP setup
 
-### Path B — Through Google Meet (requires BlackHole — install needed)
+```bash
+# On MBP — paste once, prompts for sudo password
+echo "127.0.0.1 usescriber.com" | sudo tee -a /etc/hosts
+```
 
-If you want Scriber to literally appear in a Meet call:
+To reverse later: `sudo sed -i '' '/usescriber.com/d' /etc/hosts`
 
-1. Install BlackHole (interactive sudo required):
-   ```bash
-   brew install --cask blackhole-2ch
-   ```
-2. In **Audio MIDI Setup** → create a Multi-Output Device aggregating BlackHole 2ch + Built-in Speakers.
-3. In Chrome's site settings for localhost: set mic to **BlackHole 2ch**, output to **Multi-Output Device**.
-4. In Meet: set mic to **BlackHole 2ch**, output to **Multi-Output Device**.
-5. Now Scriber's TTS goes into the Meet via BlackHole, and you hear yourself + Scriber via the monitor speakers.
-6. Continue with the script.
+### Each recording session
+
+```bash
+# On MBP — open the SSH tunnel; leave the session open while recording
+ssh -L 3000:localhost:3000 eliass-mac-mini.tail365038.ts.net
+```
+
+### On the Mac Mini (already running)
+
+`bun dev` is running under `nohup`; check with:
+```bash
+# On Mini
+pgrep -f 'next dev' && curl -fsS http://localhost:3000 -o /dev/null && echo OK
+```
+If it's down: `cd ~/code/scriber && nohup bun dev > /tmp/scriber-dev.log 2>&1 &`
+
+### Then on MBP
+
+1. Open Chrome at **`http://usescriber.com:3000`**
+2. Agent dropdown → **scriber** (default)
+3. Click **Connect** — grant mic permission
+4. Open Linear in a 2nd window: `https://linear.app/benikigai/team/BEN/active`
+5. Side-by-side both windows
+6. Cmd+Shift+5 → "Record Selected Portion" → Options → set **Microphone** to MBP built-in mic
+7. Press Record → follow the script below
 
 ## Demo script (~3 min)
 
@@ -50,20 +59,27 @@ If you want Scriber to literally appear in a Meet call:
 
 ## Pre-flight checklist before pressing record
 
-- [ ] `bun dev` running, `http://localhost:3002` loads
-- [ ] Browser console open (F12) — useful to see tool-call breadcrumbs
+- [ ] SSH tunnel open from MBP to Mini (`ssh -L 3000:localhost:3000 …`)
+- [ ] `bun dev` running on Mini (check `pgrep -f 'next dev'` over SSH)
+- [ ] Chrome at `http://usescriber.com:3000` loads the Scriber UI
+- [ ] Browser console open (Cmd+Opt+I) — tool-call breadcrumbs visible there
 - [ ] Linear web UI open in 2nd window, filtered to BEN team
-- [ ] Slack webhook either configured OR ok with verbal-only recap
-- [ ] Mic level checked (talk and confirm waveform in QuickTime)
+- [ ] Mic level checked (Cmd+Shift+5 Options → MBP Microphone)
 - [ ] Quiet room
 - [ ] BEN-41 (or another live ticket) ready to be the demo target
+- [ ] Headphones on the MBP — prevents audio feedback when Scriber talks
 
 ## Known quirks during recording
 
 - **gpt-image-1 takes ~20-25 seconds** at quality=low. Scriber's prompt includes "sketching it now…" filler. If she goes silent, prompt her: "Tell me what you're drawing."
 - **First tool call after connect** may have a ~2s warmup. Subsequent calls are snappier.
 - **Mnemo whisper** is reactive — call `consult_mnemo` via a verbal nudge ("anything you'd flag, Mnemo?"). It takes 3-6s.
-- **Audio feedback loop** — if you ever hear Scriber through your laptop speakers AND your mic is on, mute the speakers immediately or use headphones.
+- **Audio feedback loop** — wear headphones on the MBP. If Scriber comes out of MBP speakers while the mic is hot, you'll get echo into the recording.
+- **SSH tunnel drops** — if WiFi flakes during recording, the SSH session might die mid-take. Reconnect with the same command; the dev server on the Mini keeps running.
+
+## Fallback if SSH tunnel breaks during recording
+
+The Mini's Tailscale IP is `100.85.105.99`. You can hit `http://100.85.105.99:3000` directly from MBP without the SSH tunnel — same Scriber, just less polished URL bar. The `/etc/hosts` rewrite doesn't apply to bare IPs.
 
 ## After recording
 
@@ -79,3 +95,4 @@ If you want Scriber to literally appear in a Meet call:
 - **Stack:** OpenAI Realtime API (cedar voice), Responses API for Mnemo (gpt-5), gpt-image-1 for diagram generation, Linear GraphQL for ticket mutations and 3-step file attachment, Slack webhook for recap.
 - **Built in:** ~3 hours, solo.
 - **Repo:** github.com/benikigai/scriber
+- **Demo URL shown in video:** usescriber.com (cosmetic rebrand of localhost via /etc/hosts during recording — production deploy is post-hackathon)
