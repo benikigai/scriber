@@ -45,9 +45,9 @@ export async function POST(req: NextRequest) {
     const response = await openai.responses.create({
       model: MNEMO_MODEL,
       input: [
-        { role: 'system', content: MNEMO_INSTRUCTIONS },
-        { role: 'system', content: `Prior standup memory (JSON):\n${memory}` },
-        { role: 'user', content: `Scriber asks: ${context}\n\nWhisper one sentence or PASS.` },
+        { role: 'system', content: [{ type: 'input_text', text: MNEMO_INSTRUCTIONS }] },
+        { role: 'system', content: [{ type: 'input_text', text: `Prior standup memory (JSON):\n${memory}` }] },
+        { role: 'user', content: [{ type: 'input_text', text: `Scriber asks: ${context}\n\nWhisper one sentence or PASS.` }] },
       ],
       reasoning: { effort: 'medium' },
     } as any);
