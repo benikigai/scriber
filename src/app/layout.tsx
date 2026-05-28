@@ -3,8 +3,8 @@ import "./globals.css";
 import "./lib/envSetup";
 
 export const metadata: Metadata = {
-  title: "Realtime API Agents",
-  description: "A demo app from OpenAI.",
+  title: "Scriber — real-time standup facilitator",
+  description: "Scriber + Mnemo — voice agent that runs your standup and updates Linear live.",
 };
 
 export default function RootLayout({

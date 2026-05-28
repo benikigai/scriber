@@ -27,9 +27,11 @@ import { chatSupervisorScenario } from "@/app/agentConfigs/chatSupervisor";
 import { customerServiceRetailCompanyName } from "@/app/agentConfigs/customerServiceRetail";
 import { chatSupervisorCompanyName } from "@/app/agentConfigs/chatSupervisor";
 import { simpleHandoffScenario } from "@/app/agentConfigs/simpleHandoff";
+import { scriberScenario, scriberCompanyName } from "@/app/agentConfigs/scriber";
 
 // Map used by connect logic for scenarios defined via the SDK.
 const sdkScenarioMap: Record<string, RealtimeAgent[]> = {
+  scriber: scriberScenario,
   simpleHandoff: simpleHandoffScenario,
   customerServiceRetail: customerServiceRetailScenario,
   chatSupervisor: chatSupervisorScenario,
@@ -212,8 +214,9 @@ function App() {
           reorderedAgents.unshift(agent);
         }
 
-        const companyName = agentSetKey === 'customerServiceRetail'
-          ? customerServiceRetailCompanyName
+        const companyName =
+          agentSetKey === 'customerServiceRetail' ? customerServiceRetailCompanyName
+          : agentSetKey === 'scriber' ? scriberCompanyName
           : chatSupervisorCompanyName;
         const guardrail = createModerationGuardrail(companyName);
 
