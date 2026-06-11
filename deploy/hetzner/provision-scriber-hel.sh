@@ -9,9 +9,9 @@ elif [[ "${1:-}" != "" && "${1:-}" != "--dry-run" ]]; then
   exit 2
 fi
 
-SERVER_NAME="${SERVER_NAME:-scriber-hil}"
-SERVER_TYPE="${SERVER_TYPE:-cpx41}"
-LOCATION="${LOCATION:-hil}"
+SERVER_NAME="${SERVER_NAME:-scriber-hel}"
+SERVER_TYPE="${SERVER_TYPE:-cx43}"
+LOCATION="${LOCATION:-hel1}"
 IMAGE="${IMAGE:-ubuntu-24.04}"
 PUBLIC_KEY_FILE="${PUBLIC_KEY_FILE:-$HOME/.ssh/id_ed25519.pub}"
 SSH_KEY_NAME="${SSH_KEY_NAME:-scriber-mbp-m4-pro-max}"
@@ -114,14 +114,14 @@ echo "  loc:    $LOCATION"
 echo "  price:  ${MONTHLY:-unknown} USD/month (${HOURLY:-unknown} USD/hour)"
 echo "  traffic included bytes: ${TRAFFIC_BYTES:-unknown}"
 echo "  ssh key: ${SSH_KEY_ID:-will create \"$SSH_KEY_NAME\" during --execute}"
-echo "  tailscale: cloud-init joins as scriber-hil"
+echo "  tailscale: cloud-init joins as $SERVER_NAME"
 echo "  ufw: allow 80/443 public, allow all on tailscale0, deny other incoming"
 echo
 
 if [[ "$EXECUTE" != true ]]; then
   echo "Dry run only. No server, SSH key, volume, or DNS record was created."
   echo "To create the paid server after approval, run:"
-  echo "  bash deploy/hetzner/provision-scriber-hil.sh --execute"
+  echo "  bash deploy/hetzner/provision-scriber-hel.sh --execute"
   exit 0
 fi
 

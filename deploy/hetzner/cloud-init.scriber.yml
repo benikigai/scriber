@@ -1,5 +1,5 @@
 #cloud-config
-hostname: scriber-hil
+hostname: scriber-hel
 manage_etc_hosts: true
 package_update: true
 package_upgrade: false
@@ -41,7 +41,7 @@ runcmd:
   - apt-get install -y tailscale
   - systemctl enable --now docker
   - usermod -aG docker elias
-  - tailscale up --authkey=__TAILSCALE_AUTHKEY__ --hostname=scriber-hil --ssh
+  - tailscale up --authkey=__TAILSCALE_AUTHKEY__ --hostname=scriber-hel --ssh
   - ufw default deny incoming
   - ufw default allow outgoing
   - ufw allow 80/tcp
@@ -52,4 +52,4 @@ runcmd:
   - mkdir -p /opt/scriber
   - chown -R elias:elias /opt/scriber
 
-final_message: "Scriber dedicated host is provisioned. SSH over Tailscale as elias@scriber-hil."
+final_message: "Scriber dedicated host is provisioned. SSH over Tailscale as elias@scriber-hel."

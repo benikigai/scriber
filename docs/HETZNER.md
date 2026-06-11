@@ -4,25 +4,25 @@ This runbook is for a new, isolated Scriber backend host. Existing production bo
 
 ## Decision
 
-Use a fresh Hetzner Cloud server named `scriber-hil` for the internal MVP.
+Use a fresh Hetzner Cloud server named `scriber-hel` for the internal MVP.
 
 Recommended start:
 
 ```text
-server_type: cpx41
-location: hil
+server_type: cx43
+location: hel1
 image: ubuntu-24.04
-resources: 8 shared vCPU, 16 GB RAM, 240 GB disk
-current API price: 46.49 USD/month, 0.0745 USD/hour
+resources: 8 shared vCPU, 16 GB RAM, 160 GB disk
+current API price: 13.99 USD/month, 0.0224 USD/hour
 ```
 
-Rationale: Google Meet bots run Chromium, audio capture/playback, screenshots, and Realtime streaming. RAM headroom matters more than perfect CPU isolation for the first handful of concurrent meetings. `cpx41` gives enough memory and disk without starting on a dedicated-vCPU bill.
+Rationale: Google Meet bots run Chromium, audio capture/playback, screenshots, and Realtime streaming. RAM headroom matters more than perfect CPU isolation for the first handful of concurrent meetings. `cx43` gives enough memory and disk without starting on a dedicated-vCPU bill.
 
 Dedicated-vCPU alternative:
 
 ```text
-ccx23: 4 dedicated vCPU, 16 GB RAM, 160 GB disk, 39.99 USD/month in hil
-ccx33: 8 dedicated vCPU, 32 GB RAM, 240 GB disk, 76.99 USD/month in hil
+ccx23: 4 dedicated vCPU, 16 GB RAM, 160 GB disk, 36.99 USD/month in hel1
+ccx33: 8 dedicated vCPU, 32 GB RAM, 240 GB disk, 73.99 USD/month in hel1
 ```
 
 Use `ccx23` if Chromium CPU jitter becomes the bottleneck before memory does. Use `ccx33` when this becomes a paid service or needs several simultaneous active bots with lower latency variance.
@@ -44,7 +44,7 @@ Cloud-init configures:
 
 - User `elias` with `~/.ssh/id_ed25519.pub`.
 - Password SSH disabled.
-- Tailscale joined as `scriber-hil`.
+- Tailscale joined as `scriber-hel`.
 - UFW default deny incoming.
 - Public `80/tcp` and `443/tcp` only.
 - Tailscale interface allowed for SSH/private admin.
@@ -57,13 +57,13 @@ Do not create the server until the plan and monthly cost are approved.
 Dry-run:
 
 ```bash
-bash deploy/hetzner/provision-scriber-hil.sh --dry-run
+bash deploy/hetzner/provision-scriber-hel.sh --dry-run
 ```
 
 Paid create command, after approval:
 
 ```bash
-bash deploy/hetzner/provision-scriber-hil.sh --execute
+bash deploy/hetzner/provision-scriber-hel.sh --execute
 ```
 
 The script reads these secrets from 1Password without printing them:
@@ -71,7 +71,7 @@ The script reads these secrets from 1Password without printing them:
 - `Hetzner Elias API` in vault `Clawdbot`
 - `Tailscale Gateway Token Mac Mini` in vault `Clawdbot`
 
-It registers the local `~/.ssh/id_ed25519.pub` in the Hetzner project if needed, injects it into cloud-init, and creates `scriber-hil`.
+It registers the local `~/.ssh/id_ed25519.pub` in the Hetzner project if needed, injects it into cloud-init, and creates `scriber-hel`.
 
 ## DNS
 
@@ -123,7 +123,7 @@ Zoom support currently has the SDK process boundary and bridge contract. A nativ
 
 When this becomes a small paid service:
 
-1. Move from `cpx41` to `ccx33` or a larger dedicated-vCPU type.
+1. Move from `cx43` to `cpx42`, `ccx23`, `ccx33`, or a larger dedicated-vCPU type.
 2. Externalize state from JSON/Docker volume to Postgres plus object storage.
 3. Split runtime workers from the web/API host.
 4. Add a second worker host before adding multi-tenant product logic.
