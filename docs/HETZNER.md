@@ -1,88 +1,111 @@
-# Scriber Hetzner Personal Runtime
+# Scriber Dedicated Hetzner Runtime
 
-This setup runs Scriber as an always-on personal tool instead of a localhost demo.
+This runbook is for a new, isolated Scriber backend host. Existing production boxes stay off-limits.
 
-## Shape
+## Decision
 
-- `web`: Next.js dashboard, password gate, meeting bot APIs, Google Calendar OAuth.
-- `bridge`: OpenAI Realtime WebSocket bridge for live meeting bots.
-- `worker`: polls scheduled bots and launches `meet-runtime` or `zoom-runtime`.
-- `caddy`: HTTPS reverse proxy for `www.usescriber.com`.
-- `scriber-data`: Docker volume for personal MVP persistence.
+Use a fresh Hetzner Cloud server named `scriber-hil` for the internal MVP.
 
-## Server
+Recommended start:
 
-Use a Hetzner Cloud VM with the Docker CE image or install Docker Compose on Ubuntu.
+```text
+server_type: cpx41
+location: hil
+image: ubuntu-24.04
+resources: 8 shared vCPU, 16 GB RAM, 240 GB disk
+current API price: 46.49 USD/month, 0.0745 USD/hour
+```
 
-Minimum practical starting point:
+Rationale: Google Meet bots run Chromium, audio capture/playback, screenshots, and Realtime streaming. RAM headroom matters more than perfect CPU isolation for the first handful of concurrent meetings. `cpx41` gives enough memory and disk without starting on a dedicated-vCPU bill.
 
-- 2 vCPU / 4 GB RAM for web + bridge + one bot runtime.
-- 4 vCPU / 8 GB RAM if running Chromium-based Meet bots regularly.
+Dedicated-vCPU alternative:
+
+```text
+ccx23: 4 dedicated vCPU, 16 GB RAM, 160 GB disk, 39.99 USD/month in hil
+ccx33: 8 dedicated vCPU, 32 GB RAM, 240 GB disk, 76.99 USD/month in hil
+```
+
+Use `ccx23` if Chromium CPU jitter becomes the bottleneck before memory does. Use `ccx33` when this becomes a paid service or needs several simultaneous active bots with lower latency variance.
+
+## Topology
+
+- Host Caddy terminates TLS for `app.usescriber.com`.
+- Docker Compose runs:
+  - `web`: Next.js dashboard/API/password gate.
+  - `bridge`: OpenAI Realtime WebSocket bridge.
+  - `worker`: scheduler that launches due bots.
+  - per-meeting runtimes launched by the worker.
+- Named Docker volume `scriber-data` stores MVP state and Google profile data.
+- `www.usescriber.com` stays on Vercel and is not touched by this deployment.
+
+## Security
+
+Cloud-init configures:
+
+- User `elias` with `~/.ssh/id_ed25519.pub`.
+- Password SSH disabled.
+- Tailscale joined as `scriber-hil`.
+- UFW default deny incoming.
+- Public `80/tcp` and `443/tcp` only.
+- Tailscale interface allowed for SSH/private admin.
+- 8 GB swapfile for Chromium spike safety.
+
+## Provisioning Gate
+
+Do not create the server until the plan and monthly cost are approved.
+
+Dry-run:
+
+```bash
+bash deploy/hetzner/provision-scriber-hil.sh --dry-run
+```
+
+Paid create command, after approval:
+
+```bash
+bash deploy/hetzner/provision-scriber-hil.sh --execute
+```
+
+The script reads these secrets from 1Password without printing them:
+
+- `Hetzner Elias API` in vault `Clawdbot`
+- `Tailscale Gateway Token Mac Mini` in vault `Clawdbot`
+
+It registers the local `~/.ssh/id_ed25519.pub` in the Hetzner project if needed, injects it into cloud-init, and creates `scriber-hil`.
 
 ## DNS
 
-Point the domain you want to use at the Hetzner server:
+After the server exists and the public IPv4 is known, set only:
 
 ```text
-A www.usescriber.com <server-ip>
-A usescriber.com <server-ip>
+A app.usescriber.com <new-server-ip>
 ```
 
-Set `SCRIBER_DOMAIN` in `deploy/hetzner/.env` to the host Caddy should serve.
-
-## Google OAuth
-
-Create a Google OAuth web client and add:
+Do not change:
 
 ```text
-https://www.usescriber.com/api/calendar/google/callback
+www.usescriber.com
+usescriber.com
 ```
 
-Required env:
+## First Deploy
 
-```text
-GOOGLE_CALENDAR_CLIENT_ID=
-GOOGLE_CALENDAR_CLIENT_SECRET=
-GOOGLE_CALENDAR_REDIRECT_URI=https://www.usescriber.com/api/calendar/google/callback
-```
-
-Requested scopes:
-
-```text
-https://www.googleapis.com/auth/calendar.events.readonly
-https://www.googleapis.com/auth/userinfo.email
-```
-
-## Deploy
-
-For a clean server where Scriber owns HTTPS:
+On the new host:
 
 ```bash
+sudo mkdir -p /opt/scriber
+sudo chown -R elias:elias /opt/scriber
+cd /opt/scriber
+git clone https://github.com/benikigai/scriber.git .
 cp deploy/hetzner/.env.example deploy/hetzner/.env
 $EDITOR deploy/hetzner/.env
+sudo cp deploy/hetzner/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
 docker compose -f deploy/hetzner/docker-compose.yml up -d --build
 docker compose -f deploy/hetzner/docker-compose.yml logs -f web bridge worker
 ```
 
-For an existing server that already runs Caddy or another reverse proxy, do not start Scriber-managed Caddy. Bind Scriber web to localhost and add the proxy route yourself:
-
-```bash
-docker compose \
-  -f deploy/hetzner/docker-compose.yml \
-  -f deploy/hetzner/docker-compose.existing-caddy.yml \
-  up -d --build web bridge worker
-```
-
-Existing Caddy route:
-
-```caddyfile
-app.usescriber.com {
-  encode zstd gzip
-  reverse_proxy 127.0.0.1:3000
-}
-```
-
-Then open the host you routed:
+Open:
 
 ```text
 https://app.usescriber.com/meetings
@@ -92,15 +115,16 @@ Use the password from `SCRIBER_ACCESS_PASSWORD`, connect Google Calendar, and pr
 
 ## Runtime Notes
 
-Google Meet uses Playwright Chromium and Linux audio commands. The current runtime boundary is present, but a production Meet bot still needs hardened virtual audio setup, a persistent logged-in Google profile, and staging tests against real meetings.
+Google Meet uses Playwright Chromium and Linux audio commands. The runtime boundary exists, but production-grade Meet bots still need hardened virtual audio setup, a persistent logged-in Google profile, and staging tests against real meetings.
 
 Zoom support currently has the SDK process boundary and bridge contract. A native Zoom Meeting SDK/raw-data implementation is still required before real Zoom joins work.
 
-## Useful Commands
+## Future Scale Path
 
-```bash
-docker compose -f deploy/hetzner/docker-compose.yml ps
-docker compose -f deploy/hetzner/docker-compose.yml logs -f worker
-docker compose -f deploy/hetzner/docker-compose.yml restart worker bridge
-docker compose -f deploy/hetzner/docker-compose.yml exec web ls -la /data
-```
+When this becomes a small paid service:
+
+1. Move from `cpx41` to `ccx33` or a larger dedicated-vCPU type.
+2. Externalize state from JSON/Docker volume to Postgres plus object storage.
+3. Split runtime workers from the web/API host.
+4. Add a second worker host before adding multi-tenant product logic.
+5. Add queueing, per-meeting resource limits, and billing/account boundaries.

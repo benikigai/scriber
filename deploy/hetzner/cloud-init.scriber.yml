@@ -1,0 +1,55 @@
+#cloud-config
+hostname: scriber-hil
+manage_etc_hosts: true
+package_update: true
+package_upgrade: false
+
+users:
+  - default
+  - name: elias
+    gecos: Elias
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - __SSH_PUBLIC_KEY__
+
+ssh_pwauth: false
+disable_root: false
+
+write_files:
+  - path: /etc/caddy/Caddyfile
+    owner: root:root
+    permissions: "0644"
+    content: |
+      app.usescriber.com {
+        encode zstd gzip
+        reverse_proxy 127.0.0.1:3000
+      }
+
+runcmd:
+  - fallocate -l 8G /swapfile
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  - apt-get install -y ca-certificates curl gnupg git ufw docker.io docker-compose-v2 caddy
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg -o /etc/apt/keyrings/tailscale-archive-keyring.gpg
+  - curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list
+  - apt-get update
+  - apt-get install -y tailscale
+  - systemctl enable --now docker
+  - usermod -aG docker elias
+  - tailscale up --authkey=__TAILSCALE_AUTHKEY__ --hostname=scriber-hil --ssh
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw allow in on tailscale0
+  - ufw --force enable
+  - systemctl enable --now caddy
+  - mkdir -p /opt/scriber
+  - chown -R elias:elias /opt/scriber
+
+final_message: "Scriber dedicated host is provisioned. SSH over Tailscale as elias@scriber-hil."

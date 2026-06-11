@@ -1,4 +1,4 @@
-{$SCRIBER_DOMAIN}, usescriber.com {
+app.usescriber.com {
   encode zstd gzip
-  reverse_proxy web:3000
+  reverse_proxy 127.0.0.1:3000
 }
