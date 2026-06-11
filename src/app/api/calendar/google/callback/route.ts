@@ -6,9 +6,11 @@ import {
 } from "@/server/calendar/googleConnectionStore";
 import { syncConnectedGoogleCalendar } from "@/server/calendar/googleSync";
 import { GOOGLE_OAUTH_STATE_COOKIE } from "@/server/calendar/oauthState";
+import { isPublicAppSecure, publicAppOrigin, publicAppUrl } from "@/lib/publicOrigin";
 
 export async function GET(req: NextRequest) {
-  const redirectUrl = new URL("/meetings", req.url);
+  const origin = publicAppOrigin(req);
+  const redirectUrl = publicAppUrl("/meetings", req);
   const error = req.nextUrl.searchParams.get("error");
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
@@ -31,7 +33,7 @@ export async function GET(req: NextRequest) {
     const connection = await exchangeGoogleCalendarCode({
       code,
       existingRefreshToken: existing?.refreshToken,
-      origin: req.nextUrl.origin,
+      origin,
     });
     saveGoogleCalendarConnection(connection);
     const result = await syncConnectedGoogleCalendar();
@@ -53,7 +55,7 @@ function redirectWithClearedState(url: URL, req: NextRequest) {
     maxAge: 0,
     path: "/",
     sameSite: "lax",
-    secure: req.nextUrl.protocol === "https:",
+    secure: isPublicAppSecure(req),
   });
   return response;
 }

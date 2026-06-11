@@ -5,6 +5,7 @@ import {
   authCookieValue,
   safeRedirectPath,
 } from "@/lib/authGate";
+import { publicAppUrl } from "@/lib/publicOrigin";
 
 export async function POST(req: NextRequest) {
   const form = await req.formData();
@@ -12,19 +13,19 @@ export async function POST(req: NextRequest) {
   const next = safeRedirectPath(form.get("next"));
 
   if (!authConfigured()) {
-    return NextResponse.redirect(new URL(`/login?configured=0&next=${encodeURIComponent(next)}`, req.url));
+    return NextResponse.redirect(publicAppUrl(`/login?configured=0&next=${encodeURIComponent(next)}`, req));
   }
 
   if (password !== process.env.SCRIBER_ACCESS_PASSWORD) {
-    return NextResponse.redirect(new URL(`/login?error=1&next=${encodeURIComponent(next)}`, req.url));
+    return NextResponse.redirect(publicAppUrl(`/login?error=1&next=${encodeURIComponent(next)}`, req));
   }
 
   const cookieValue = await authCookieValue();
   if (!cookieValue) {
-    return NextResponse.redirect(new URL(`/login?configured=0&next=${encodeURIComponent(next)}`, req.url));
+    return NextResponse.redirect(publicAppUrl(`/login?configured=0&next=${encodeURIComponent(next)}`, req));
   }
 
-  const response = NextResponse.redirect(new URL(next, req.url));
+  const response = NextResponse.redirect(publicAppUrl(next, req));
   response.cookies.set(AUTH_COOKIE, cookieValue, {
     httpOnly: true,
     sameSite: "lax",
