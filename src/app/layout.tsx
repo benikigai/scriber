@@ -1,6 +1,19 @@
 import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./lib/envSetup";
+
+const geistSans = Geist({
+  subsets: ["latin"],
+  variable: "--font-scriber-sans",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-scriber-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Scriber — AI meeting agent for live calls",
@@ -15,7 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`antialiased`}>{children}</body>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
     </html>
   );
 }
