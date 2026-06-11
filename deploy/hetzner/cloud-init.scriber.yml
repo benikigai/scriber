@@ -18,7 +18,7 @@ ssh_pwauth: false
 disable_root: false
 
 write_files:
-  - path: /etc/caddy/Caddyfile
+  - path: /tmp/scriber-Caddyfile
     owner: root:root
     permissions: "0644"
     content: |
@@ -33,20 +33,24 @@ runcmd:
   - mkswap /swapfile
   - swapon /swapfile
   - echo '/swapfile none swap sw 0 0' >> /etc/fstab
-  - apt-get install -y ca-certificates curl gnupg git ufw docker.io docker-compose-v2 caddy
-  - install -m 0755 -d /etc/apt/keyrings
-  - curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg -o /etc/apt/keyrings/tailscale-archive-keyring.gpg
-  - curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gnupg git ufw docker.io docker-compose-v2 caddy
+  - install -m 0644 /tmp/scriber-Caddyfile /etc/caddy/Caddyfile
+  - curl -fsSL https://tailscale.com/install.sh | sh
   - apt-get update
-  - apt-get install -y tailscale
   - systemctl enable --now docker
   - usermod -aG docker elias
-  - tailscale up --authkey=__TAILSCALE_AUTHKEY__ --hostname=scriber-hel --ssh
   - ufw default deny incoming
   - ufw default allow outgoing
   - ufw allow 80/tcp
   - ufw allow 443/tcp
-  - ufw allow in on tailscale0
+  - |
+      if tailscale up --authkey=__TAILSCALE_AUTHKEY__ --hostname=scriber-hel --ssh; then
+        ufw allow in on tailscale0
+      else
+        echo "Tailscale auth failed; leaving temporary public SSH open for repair." >&2
+        touch /var/log/scriber-tailscale-auth.failed
+        ufw allow OpenSSH
+      fi
   - ufw --force enable
   - systemctl enable --now caddy
   - mkdir -p /opt/scriber

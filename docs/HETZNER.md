@@ -6,14 +6,19 @@ This runbook is for a new, isolated Scriber backend host. Existing production bo
 
 Use a fresh Hetzner Cloud server named `scriber-hel` for the internal MVP.
 
-Recommended start:
+Current host:
 
 ```text
-server_type: cx43
+server id: 139807416
+server name: scriber-hel
+server type: cx43
 location: hel1
+public IPv4: 89.167.70.60
+public IPv6: 2a01:4f9:c014:7a3a::/64
 image: ubuntu-24.04
 resources: 8 shared vCPU, 16 GB RAM, 160 GB disk
-current API price: 13.99 USD/month, 0.0224 USD/hour
+API price at provision: 13.99 USD/month, 0.0224 USD/hour
+Docker volume: hetzner_scriber-data
 ```
 
 Rationale: Google Meet bots run Chromium, audio capture/playback, screenshots, and Realtime streaming. RAM headroom matters more than perfect CPU isolation for the first handful of concurrent meetings. `cx43` gives enough memory and disk without starting on a dedicated-vCPU bill.
@@ -50,9 +55,21 @@ Cloud-init configures:
 - Tailscale interface allowed for SSH/private admin.
 - 8 GB swapfile for Chromium spike safety.
 
+If Tailscale auth fails during bootstrap, cloud-init leaves temporary public SSH open and writes `/var/log/scriber-tailscale-auth.failed` so the host can be repaired. After joining the tailnet, remove public SSH from UFW and administer over Tailscale.
+
+Current status: the server is provisioned and live, but the stored 1Password item `Tailscale Gateway Token Mac Mini` was rejected by Tailscale during bootstrap. Public SSH is temporarily open, key-only, until the server joins Tailscale. Generate a fresh reusable/pre-authorized Tailscale auth key, update that 1Password item, then run:
+
+```bash
+ssh elias@89.167.70.60
+sudo tailscale up --authkey=<fresh-auth-key> --hostname=scriber-hel --ssh
+sudo ufw allow in on tailscale0
+sudo ufw delete allow OpenSSH || true
+tailscale status
+```
+
 ## Provisioning Gate
 
-Do not create the server until the plan and monthly cost are approved.
+This server has already been created after approval. Keep the provisioning script for rebuilds or replacement hosts.
 
 Dry-run:
 
@@ -101,8 +118,8 @@ cp deploy/hetzner/.env.example deploy/hetzner/.env
 $EDITOR deploy/hetzner/.env
 sudo cp deploy/hetzner/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl reload caddy
-docker compose -f deploy/hetzner/docker-compose.yml up -d --build
-docker compose -f deploy/hetzner/docker-compose.yml logs -f web bridge worker
+sudo docker compose -f deploy/hetzner/docker-compose.yml up -d --build
+sudo docker compose -f deploy/hetzner/docker-compose.yml logs -f web bridge worker
 ```
 
 Open:
@@ -112,6 +129,14 @@ https://app.usescriber.com/meetings
 ```
 
 Use the password from `SCRIBER_ACCESS_PASSWORD`, connect Google Calendar, and press Sync. Accepted future Zoom/Google Meet events are imported and scheduled two minutes before start.
+
+Google OAuth callback:
+
+```text
+https://app.usescriber.com/api/calendar/google/callback
+```
+
+If Google returns `redirect_uri_mismatch`, add that callback to the OAuth client used by `GOOGLE_CALENDAR_CLIENT_ID`.
 
 ## Runtime Notes
 
