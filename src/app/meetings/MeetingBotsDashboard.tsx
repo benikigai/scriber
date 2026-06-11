@@ -1,0 +1,349 @@
+"use client";
+
+import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import type {
+  BotCommandType,
+  MeetingBotRecord,
+  MeetingBotSnapshot,
+  ToolProposalRecord,
+} from "@/server/meetingBots/types";
+
+type AdapterReadiness = {
+  platform: "zoom" | "google_meet";
+  ready: boolean;
+  runtime: string;
+  missing: string[];
+  capabilities: string[];
+};
+
+const COMMANDS: { type: BotCommandType; label: string }[] = [
+  { type: "wake", label: "Wake" },
+  { type: "quiet", label: "Quiet" },
+  { type: "mute", label: "Mute" },
+  { type: "unmute", label: "Unmute" },
+  { type: "capture", label: "Capture" },
+  { type: "leave", label: "Leave" },
+];
+
+export default function MeetingBotsDashboard() {
+  const [bots, setBots] = useState<MeetingBotRecord[]>([]);
+  const [snapshot, setSnapshot] = useState<MeetingBotSnapshot | null>(null);
+  const [adapters, setAdapters] = useState<AdapterReadiness[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [meetingUrl, setMeetingUrl] = useState("");
+  const [title, setTitle] = useState("");
+  const [joinAt, setJoinAt] = useState("");
+  const [manualSpeak, setManualSpeak] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const events = new EventSource(`/api/meeting-bots/${selectedId}/events`);
+    events.addEventListener("snapshot", (event) => setSnapshot(JSON.parse((event as MessageEvent).data)));
+    const refreshSnapshot = () => void loadSnapshot(selectedId);
+    [
+      "meeting_bot.updated",
+      "transcript.added",
+      "participant.updated",
+      "artifact.added",
+      "tool_proposal.created",
+      "tool_proposal.updated",
+      "bot_command.created",
+    ].forEach((type) => events.addEventListener(type, refreshSnapshot));
+    return () => events.close();
+  }, [selectedId]);
+
+  const selectedBot = snapshot?.bot ?? bots.find((bot) => bot.id === selectedId) ?? null;
+  const runtimeCommand = useMemo(() => {
+    if (!selectedBot) return "";
+    const script = selectedBot.platform === "google_meet" ? "meet-runtime" : "zoom-runtime";
+    return `npm run ${script} -- --bot-id ${selectedBot.id} --token ${selectedBot.botToken} --url "${selectedBot.meetingUrl}"`;
+  }, [selectedBot]);
+
+  async function refresh() {
+    setError(null);
+    const [botsResponse, adaptersResponse] = await Promise.all([
+      fetch("/api/meeting-bots"),
+      fetch("/api/meeting-bots/adapters"),
+    ]);
+    const botsBody = await botsResponse.json();
+    const adaptersBody = await adaptersResponse.json();
+    setBots(botsBody.bots ?? []);
+    setAdapters(adaptersBody.adapters ?? []);
+    if (!selectedId && botsBody.bots?.[0]) setSelectedId(botsBody.bots[0].id);
+    if (selectedId) await loadSnapshot(selectedId);
+  }
+
+  async function loadSnapshot(id: string) {
+    const response = await fetch(`/api/meeting-bots/${id}`);
+    if (!response.ok) return;
+    setSnapshot(await response.json());
+  }
+
+  async function createBot(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    const response = await fetch("/api/meeting-bots", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        meetingUrl,
+        title,
+        joinAt: joinAt ? new Date(joinAt).toISOString() : null,
+        wakeMode: "wake",
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      setError(body.error ?? "Create failed");
+      return;
+    }
+    setMeetingUrl("");
+    setTitle("");
+    setJoinAt("");
+    setSelectedId(body.bot.id);
+    await refresh();
+    await loadSnapshot(body.bot.id);
+  }
+
+  async function sendCommand(type: BotCommandType, text?: string) {
+    if (!selectedId) return;
+    await fetch(`/api/meeting-bots/${selectedId}/commands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, text }),
+    });
+    if (type === "manual_speak") setManualSpeak("");
+    await loadSnapshot(selectedId);
+  }
+
+  async function updateProposal(proposal: ToolProposalRecord, action: "approve" | "reject") {
+    await fetch(`/api/tool-proposals/${proposal.id}/${action}`, { method: "POST" });
+    if (selectedId) await loadSnapshot(selectedId);
+  }
+
+  return (
+    <main className="min-h-screen bg-neutral-50 text-neutral-950">
+      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-4">
+        <Link href="/" className="text-xl font-semibold tracking-tight">
+          Scriber
+        </Link>
+        <div className="text-sm text-neutral-500">Meeting runtime</div>
+      </header>
+
+      <div className="grid h-[calc(100vh-65px)] grid-cols-[360px_1fr] overflow-hidden">
+        <aside className="overflow-y-auto border-r border-neutral-200 bg-white p-4">
+          <form onSubmit={createBot} className="space-y-3">
+            <input
+              value={meetingUrl}
+              onChange={(event) => setMeetingUrl(event.target.value)}
+              placeholder="Zoom or Google Meet URL"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            />
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Title"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            />
+            <input
+              value={joinAt}
+              onChange={(event) => setJoinAt(event.target.value)}
+              type="datetime-local"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            />
+            <button
+              type="submit"
+              className="w-full rounded-md bg-neutral-950 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            >
+              Create Bot
+            </button>
+            {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
+          </form>
+
+          <div className="mt-6 space-y-2">
+            {bots.map((bot) => (
+              <button
+                key={bot.id}
+                onClick={() => setSelectedId(bot.id)}
+                className={`w-full rounded-md border px-3 py-3 text-left text-sm ${
+                  bot.id === selectedId ? "border-neutral-950 bg-neutral-100" : "border-neutral-200 bg-white hover:bg-neutral-50"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-medium">{bot.title}</span>
+                  <StatusPill status={bot.status} />
+                </div>
+                <div className="mt-1 flex items-center justify-between text-xs text-neutral-500">
+                  <span>{bot.platform === "google_meet" ? "Google Meet" : "Zoom"}</span>
+                  <span>{bot.joinAt ? new Date(bot.joinAt).toLocaleString() : "Now"}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <section className="grid min-w-0 grid-rows-[auto_1fr] overflow-hidden">
+          <div className="border-b border-neutral-200 bg-white p-4">
+            {selectedBot ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h1 className="text-lg font-semibold">{selectedBot.title}</h1>
+                    <div className="mt-1 text-xs text-neutral-500">{selectedBot.meetingUrl}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {COMMANDS.map((command) => (
+                      <button
+                        key={command.type}
+                        onClick={() => void sendCommand(command.type)}
+                        className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-100"
+                      >
+                        {command.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-[1fr_auto] gap-2">
+                  <input
+                    value={manualSpeak}
+                    onChange={(event) => setManualSpeak(event.target.value)}
+                    placeholder="Scriber says..."
+                    className="rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+                  />
+                  <button
+                    onClick={() => void sendCommand("manual_speak", manualSpeak)}
+                    className="rounded-md bg-neutral-950 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                  >
+                    Speak
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <InfoBox label="Runtime" value={runtimeCommand} />
+                  <InfoBox label="Status" value={`${selectedBot.status} · ${selectedBot.wakeMode}`} />
+                  <InfoBox label="Capture" value={selectedBot.screenShareActive ? "screen share active" : "idle"} />
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-neutral-500">No meeting bot selected.</div>
+            )}
+          </div>
+
+          <div className="grid min-h-0 grid-cols-[1.2fr_0.8fr] overflow-hidden">
+            <div className="min-w-0 overflow-y-auto p-4">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">Transcript</h2>
+              <div className="space-y-2">
+                {snapshot?.transcript.map((entry) => (
+                  <div key={entry.id} className="rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm">
+                    <div className="mb-1 text-xs text-neutral-500">
+                      {entry.speaker ?? entry.role} · {new Date(entry.createdAt).toLocaleTimeString()}
+                    </div>
+                    <div>{entry.text}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="min-w-0 overflow-y-auto border-l border-neutral-200 p-4">
+              <Section title="Approvals">
+                {snapshot?.proposals.map((proposal) => (
+                  <div key={proposal.id} className="rounded-md border border-neutral-200 bg-white p-3 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium">{proposal.title}</div>
+                      <StatusPill status={proposal.status} />
+                    </div>
+                    <pre className="mt-2 max-h-32 overflow-auto rounded bg-neutral-100 p-2 text-xs">
+                      {JSON.stringify(proposal.arguments, null, 2)}
+                    </pre>
+                    {proposal.status === "pending" ? (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => void updateProposal(proposal, "approve")}
+                          className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-800"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => void updateProposal(proposal, "reject")}
+                          className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-100"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </Section>
+
+              <Section title="Artifacts">
+                {snapshot?.artifacts.map((artifact) => (
+                  <a
+                    key={artifact.id}
+                    href={artifact.url ?? "#"}
+                    target="_blank"
+                    className="block rounded-md border border-neutral-200 bg-white p-3 text-sm hover:bg-neutral-50"
+                  >
+                    <div className="font-medium">{artifact.title}</div>
+                    <div className="mt-1 text-xs text-neutral-500">{new Date(artifact.createdAt).toLocaleString()}</div>
+                  </a>
+                ))}
+              </Section>
+
+              <Section title="Adapters">
+                {adapters.map((adapter) => (
+                  <div key={adapter.platform} className="rounded-md border border-neutral-200 bg-white p-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{adapter.platform === "google_meet" ? "Google Meet" : "Zoom"}</span>
+                      <StatusPill status={adapter.ready ? "ready" : "missing"} />
+                    </div>
+                    <div className="mt-1 text-xs text-neutral-500">{adapter.runtime}</div>
+                    {adapter.missing.length ? (
+                      <div className="mt-2 text-xs text-amber-700">{adapter.missing.join(", ")}</div>
+                    ) : null}
+                  </div>
+                ))}
+              </Section>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const color =
+    status === "ready" || status === "listening" || status === "active" || status === "executed"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : status === "error" || status === "failed" || status === "missing"
+        ? "bg-red-50 text-red-700 border-red-200"
+        : "bg-amber-50 text-amber-700 border-amber-200";
+  return <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${color}`}>{status}</span>;
+}
+
+function InfoBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-md border border-neutral-200 bg-neutral-50 p-2">
+      <div className="font-medium text-neutral-500">{label}</div>
+      <div className="mt-1 truncate text-neutral-900" title={value}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="mb-5 space-y-2">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">{title}</h2>
+      {children}
+    </div>
+  );
+}

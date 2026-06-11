@@ -3,8 +3,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
 
-import Image from "next/image";
-
 // UI components
 import Transcript from "./components/Transcript";
 import Events from "./components/Events";
@@ -106,6 +104,7 @@ function App() {
 
   const [sessionStatus, setSessionStatus] =
     useState<SessionStatus>("DISCONNECTED");
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const [isEventsPaneExpanded, setIsEventsPaneExpanded] =
     useState<boolean>(true);
@@ -153,12 +152,6 @@ function App() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (selectedAgentName && sessionStatus === "DISCONNECTED") {
-      connectToRealtime();
-    }
-  }, [selectedAgentName]);
-
-  useEffect(() => {
     if (
       sessionStatus === "CONNECTED" &&
       selectedAgentConfigSet &&
@@ -186,14 +179,37 @@ function App() {
     const data = await tokenResponse.json();
     logServerEvent(data, "fetch_session_token_response");
 
-    if (!data.client_secret?.value) {
-      logClientEvent(data, "error.no_ephemeral_key");
-      console.error("No ephemeral key provided by the server");
+    if (!tokenResponse.ok) {
+      const message =
+        data?.error?.message ??
+        data?.message ??
+        `Session token request failed with status ${tokenResponse.status}`;
+      logClientEvent(data, "error.session_token_request_failed");
+      console.error(message);
+      setConnectionError(message);
       setSessionStatus("DISCONNECTED");
       return null;
     }
 
+    if (!data.client_secret?.value) {
+      logClientEvent(data, "error.no_ephemeral_key");
+      const message = "No realtime client secret was provided by the server.";
+      console.error(message);
+      setConnectionError(message);
+      setSessionStatus("DISCONNECTED");
+      return null;
+    }
+
+    setConnectionError(null);
     return data.client_secret.value;
+  };
+
+  const friendlyRealtimeError = (err: unknown) => {
+    const raw = err instanceof Error ? err.message : String(err ?? "Realtime connection failed");
+    if (/permission denied|notallowed|microphone|audio capture/i.test(raw)) {
+      return "Microphone permission was denied. Allow microphone access for localhost in the browser, then click Start standup again.";
+    }
+    return raw;
   };
 
   const connectToRealtime = async () => {
@@ -201,6 +217,7 @@ function App() {
     if (sdkScenarioMap[agentSetKey]) {
       if (sessionStatus !== "DISCONNECTED") return;
       setSessionStatus("CONNECTING");
+      setConnectionError(null);
 
       try {
         const EPHEMERAL_KEY = await fetchEphemeralKey();
@@ -230,7 +247,9 @@ function App() {
           },
         });
       } catch (err) {
-        console.error("Error connecting via SDK:", err);
+        const message = friendlyRealtimeError(err);
+        console.warn("Realtime connection failed:", message);
+        setConnectionError(message);
         setSessionStatus("DISCONNECTED");
       }
       return;
@@ -328,24 +347,6 @@ function App() {
     }
   };
 
-  const handleAgentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newAgentConfig = e.target.value;
-    const url = new URL(window.location.toString());
-    url.searchParams.set("agentConfig", newAgentConfig);
-    window.location.replace(url.toString());
-  };
-
-  const handleSelectedAgentChange = (
-    e: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    const newAgentName = e.target.value;
-    // Reconnect session with the newly selected agent as root so that tool
-    // execution works correctly.
-    disconnectFromRealtime();
-    setSelectedAgentName(newAgentName);
-    // connectToRealtime will be triggered by effect watching selectedAgentName
-  };
-
   // Because we need a new connection, refresh the page when codec changes
   const handleCodecChange = (newCodec: string) => {
     const url = new URL(window.location.toString());
@@ -433,8 +434,6 @@ function App() {
     };
   }, [sessionStatus]);
 
-  const agentSetKey = searchParams.get("agentConfig") || defaultAgentSetKey;
-
   return (
     <div className="text-base flex flex-col h-screen bg-gray-100 text-gray-800 relative">
       <div className="px-6 py-4 flex justify-between items-center border-b border-gray-100">
@@ -461,8 +460,21 @@ function App() {
           >
             Linear · BenIkigai (BEN) ↗
           </a>
+          <span className="hidden md:inline text-gray-400">·</span>
+          <a
+            href="/meetings"
+            className="hidden md:inline text-gray-600 hover:text-black underline-offset-2 hover:underline"
+          >
+            Meeting bots
+          </a>
         </div>
       </div>
+
+      {connectionError ? (
+        <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900">
+          {connectionError}
+        </div>
+      ) : null}
 
       <div className="flex flex-1 gap-2 px-2 overflow-hidden relative">
         <Transcript

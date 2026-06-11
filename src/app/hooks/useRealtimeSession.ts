@@ -130,7 +130,7 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
       void OpenAIRealtimeWebSocket;
       const useWs = typeof window !== 'undefined'
         && new URLSearchParams(window.location.search).get('transport') === 'ws';
-      sessionRef.current = new RealtimeSession(rootAgent, {
+      const session = new RealtimeSession(rootAgent, {
         transport: useWs
           ? new OpenAIRealtimeWebSocket({})
           : new OpenAIRealtimeWebRTC({
@@ -150,7 +150,15 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
         context: extraContext ?? {},
       });
 
-      await sessionRef.current.connect({ apiKey: ek });
+      sessionRef.current = session;
+      try {
+        await session.connect({ apiKey: ek });
+      } catch (error) {
+        session.close();
+        sessionRef.current = null;
+        updateStatus('DISCONNECTED');
+        throw error;
+      }
       updateStatus('CONNECTED');
     },
     [callbacks, updateStatus],

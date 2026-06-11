@@ -3,8 +3,9 @@ import "./globals.css";
 import "./lib/envSetup";
 
 export const metadata: Metadata = {
-  title: "Scriber — real-time standup facilitator",
-  description: "Scriber + Mnemo — voice agent that runs your standup and updates Linear live.",
+  title: "Scriber — AI meeting agent for live calls",
+  description:
+    "Scriber joins Zoom and Google Meet, listens for decisions, responds when invited, and keeps action items moving.",
 };
 
 export default function RootLayout({

@@ -1,215 +1,72 @@
-import { RealtimeAgent, tool } from '@openai/agents/realtime';
+import { RealtimeAgent, tool } from "@openai/agents/realtime";
+import { getScriberToolSpec, scriberToolSpecs } from "@/lib/scriberToolSpecs";
 
-// Tool: Linear search (lists open issues for the team)
-const searchIssues = tool({
-  name: 'linear_search_issues',
-  description: 'Search Linear issues by optional assignee email or status. Returns up to 10 issues. Use when the team mentions a ticket, blocker, or commitment.',
-  parameters: {
-    type: 'object',
-    properties: {
-      assignee_email: { type: 'string', description: 'Optional assignee email filter' },
-      status: { type: 'string', description: 'Optional status filter, e.g. "In Progress", "Todo", "Blocked"' },
+async function callJsonRoute(path: string, body: Record<string, unknown>) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return response.json();
+}
+
+function clientToolRoute(toolName: string) {
+  switch (toolName) {
+    case "linear_search_issues":
+      return "/api/tools/linear/search";
+    case "linear_get_issue":
+      return "/api/tools/linear/get";
+    case "consult_mnemo":
+      return "/api/whispers";
+    default:
+      return null;
+  }
+}
+
+const tools = scriberToolSpecs.map((spec) =>
+  tool({
+    name: spec.name,
+    description: spec.description,
+    parameters: spec.parameters,
+    execute: async (args: any) => {
+      const currentSpec = getScriberToolSpec(spec.name);
+      if (!currentSpec) return { error: `Unknown tool ${spec.name}` };
+
+      if (currentSpec.safety === "proposal") {
+        return callJsonRoute("/api/tool-proposals", {
+          toolName: spec.name,
+          arguments: args,
+          source: "browser",
+        });
+      }
+
+      const route = clientToolRoute(spec.name);
+      if (!route) return { error: `No browser route for ${spec.name}` };
+      return callJsonRoute(route, args);
     },
-    required: [],
-    additionalProperties: false,
-  },
-  execute: async (args: any) => {
-    const r = await fetch('/api/tools/linear/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(args),
-    });
-    return await r.json();
-  },
-});
-
-// Tool: Linear get one issue
-const getIssue = tool({
-  name: 'linear_get_issue',
-  description: 'Get full detail for a Linear issue by identifier (e.g. "BEN-12").',
-  parameters: {
-    type: 'object',
-    properties: { id: { type: 'string', description: 'Issue identifier like BEN-12' } },
-    required: ['id'],
-    additionalProperties: false,
-  },
-  execute: async (args: any) => {
-    const r = await fetch('/api/tools/linear/get', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(args),
-    });
-    return await r.json();
-  },
-});
-
-// Tool: Linear create
-const createIssue = tool({
-  name: 'linear_create_issue',
-  description: 'Create a new Linear issue. Provide a clear title. Description and priority are optional.',
-  parameters: {
-    type: 'object',
-    properties: {
-      title: { type: 'string' },
-      description: { type: 'string' },
-      priority: { type: 'number', description: '0=none, 1=urgent, 2=high, 3=medium, 4=low' },
-    },
-    required: ['title'],
-    additionalProperties: false,
-  },
-  execute: async (args: any) => {
-    const r = await fetch('/api/tools/linear/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(args),
-    });
-    return await r.json();
-  },
-});
-
-// Tool: Linear update (status, assignee, priority, title)
-const updateIssue = tool({
-  name: 'linear_update_issue',
-  description:
-    'Update an existing Linear issue. Set state by name ("In Progress", "Done", "Blocked"), reassign by email or display name, change priority (0=none, 1=urgent, 2=high, 3=medium, 4=low), or rename. Pass only the fields you want to change.',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: { type: 'string', description: 'Issue identifier like BEN-12' },
-      state: { type: 'string', description: 'Optional state name, e.g. "In Progress"' },
-      title: { type: 'string', description: 'Optional new title' },
-      assignee: {
-        type: 'string',
-        description: 'Optional new assignee: email, display name, or "me". Pass empty string to unassign.',
-      },
-      priority: {
-        type: 'number',
-        description: 'Optional priority. 0=none, 1=urgent, 2=high, 3=medium, 4=low.',
-      },
-    },
-    required: ['id'],
-    additionalProperties: false,
-  },
-  execute: async (args: any) => {
-    const r = await fetch('/api/tools/linear/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(args),
-    });
-    return await r.json();
-  },
-});
-
-// Tool: Linear add comment
-const addComment = tool({
-  name: 'linear_add_comment',
-  description: 'Add a markdown comment to a Linear issue.',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: { type: 'string' },
-      body: { type: 'string', description: 'Markdown comment body' },
-    },
-    required: ['id', 'body'],
-    additionalProperties: false,
-  },
-  execute: async (args: any) => {
-    const r = await fetch('/api/tools/linear/comment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(args),
-    });
-    return await r.json();
-  },
-});
-
-// Tool: Generate diagram via gpt-image-1 and attach to a Linear issue
-const generateDiagram = tool({
-  name: 'generate_diagram',
-  description:
-    'Generate a flat technical diagram via gpt-image-1 and attach it to a Linear issue. Use when the conversation surfaces something visual (architecture, flow, state machine, comparison).',
-  parameters: {
-    type: 'object',
-    properties: {
-      prompt: { type: 'string', description: 'Natural-language description of what to draw' },
-      attach_to_issue: { type: 'string', description: 'Linear issue identifier like BEN-12' },
-    },
-    required: ['prompt', 'attach_to_issue'],
-    additionalProperties: false,
-  },
-  execute: async (args: any) => {
-    const r = await fetch('/api/tools/diagram', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(args),
-    });
-    return await r.json();
-  },
-});
-
-// Tool: Slack recap (gracefully degrades if SLACK_WEBHOOK_URL is unset)
-const postSlackRecap = tool({
-  name: 'post_slack_recap',
-  description:
-    'Post a standup recap to Slack. Use at the END of the standup with a structured summary: who owns what, what is blocked, what is due this week.',
-  parameters: {
-    type: 'object',
-    properties: { body: { type: 'string', description: 'Markdown recap body' } },
-    required: ['body'],
-    additionalProperties: false,
-  },
-  execute: async (args: any) => {
-    const r = await fetch('/api/tools/slack', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(args),
-    });
-    return await r.json();
-  },
-});
-
-// Tool: Consult Mnemo — the silent supervisor that holds long-term cross-standup memory
-const consultMnemo = tool({
-  name: 'consult_mnemo',
-  description:
-    'Ask Mnemo (your silent supervisor) for tactical guidance. Use when you suspect there is historical context worth surfacing: a repeated blocker, an old commitment, a connection between two threads. Mnemo returns a short whisper you can voice naturally.',
-  parameters: {
-    type: 'object',
-    properties: {
-      context: { type: 'string', description: 'Brief context about what you want guidance on' },
-    },
-    required: ['context'],
-    additionalProperties: false,
-  },
-  execute: async (args: any) => {
-    const r = await fetch('/api/whispers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(args),
-    });
-    return await r.json();
-  },
-});
+  }),
+);
 
 export const scriberAgent = new RealtimeAgent({
-  name: 'scriber',
-  voice: 'marin',
+  name: "scriber",
+  voice: "marin",
   instructions: `You are Scriber, an AI agent who facilitates daily standup meetings for the BenIkigai team. You are a teammate, not an assistant.
 
 # Your job during standup
 1. Open the standup. Greet the team. Confirm who's present.
-2. Move through each person in turn. Prompt them naturally — "Ben, what's on your plate today?" — and let them speak freely.
-3. Listen for: what they did, what they're doing, what's blocking them, what needs to become a ticket, what's already a ticket that needs a status change.
-4. Take action via tools AS THE CONVERSATION HAPPENS. Don't wait until end of standup. If someone mentions a blocker, create or update the relevant Linear ticket immediately and verbally confirm: "Got it, I've marked BEN-12 as blocked." Don't ask for permission for routine updates; do ask before creating new tickets unless context makes it obvious.
-5. If a topic would benefit from a visual (architecture, flow, comparison), offer to generate a diagram and attach to the relevant ticket via generate_diagram.
-6. Close the standup with a verbal recap: who owns what, what's blocked, what's due this week. Post the same recap to Slack via post_slack_recap.
+2. Move through each person in turn. Prompt them naturally and let them speak freely.
+3. Listen for: what they did, what they're doing, what's blocking them, what needs to become a ticket, and what existing tickets need updates.
+4. Use read tools immediately. For create/update/comment/Slack/diagram tools, create an approval proposal and tell the team exactly what is waiting for approval.
+5. If a topic would benefit from a visual, propose generating a diagram and attaching it to the relevant ticket.
+6. Close the standup with a verbal recap and propose posting the same recap to Slack.
 
 # Mnemo
-You have a silent supervisor agent called Mnemo who holds long-term cross-standup memory. Periodically — or when you suspect there is historical context worth surfacing — call consult_mnemo with brief context. She returns a short whisper. Voice it naturally if it's something the team should hear; act on it silently if it's just guidance for you.
+You have a silent supervisor agent called Mnemo who holds long-term cross-standup memory. Periodically, or when you suspect there is historical context worth surfacing, call consult_mnemo with brief context. She returns a short whisper. Voice it naturally if it's useful; act on it silently if it's just guidance.
 
 # Behavioral rules
 - Speak like a colleague, not a customer service bot. Brief, warm, direct.
-- Never invent ticket IDs, status values, or assignees. Always call a tool.
+- Never invent ticket IDs, status values, or assignees. Always call a read tool first.
+- Never claim an external write has happened until a pending proposal is approved and executed.
 - If someone says "Scriber, quiet" or "Scriber, mute", stop speaking immediately and acknowledge with a single short word before going silent.
 - Mode switches: "Scriber, always on" / "Scriber, listen only" / "Scriber, you're back" should be respected immediately and acknowledged briefly.
 
@@ -220,21 +77,12 @@ You have a silent supervisor agent called Mnemo who holds long-term cross-standu
 
 # First turn
 When the session begins, greet the team briefly: "Morning team. Ready to run standup?" Then wait. Do not lecture.`,
-  tools: [
-    searchIssues,
-    getIssue,
-    createIssue,
-    updateIssue,
-    addComment,
-    generateDiagram,
-    postSlackRecap,
-    consultMnemo,
-  ],
+  tools,
   handoffs: [],
-  handoffDescription: 'Real-time agentic standup facilitator',
+  handoffDescription: "Real-time agentic standup facilitator",
 });
 
 export const scriberScenario = [scriberAgent];
-export const scriberCompanyName = 'BenIkigai';
+export const scriberCompanyName = "BenIkigai";
 
 export default scriberScenario;
