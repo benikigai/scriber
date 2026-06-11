@@ -8,6 +8,7 @@ import type {
   MeetingBotSnapshot,
   ToolProposalRecord,
 } from "@/server/meetingBots/types";
+import { scriberToolSpecs } from "@/lib/scriberToolSpecs";
 
 type AdapterReadiness = {
   platform: "zoom" | "google_meet";
@@ -31,6 +32,40 @@ const COMMANDS: { type: BotCommandType; label: string }[] = [
   { type: "unmute", label: "Unmute" },
   { type: "capture", label: "Capture" },
   { type: "leave", label: "Leave" },
+];
+
+const TOOL_LABELS: Record<string, { label: string; category: string }> = {
+  linear_search_issues: { label: "Search Linear issues", category: "Linear" },
+  linear_get_issue: { label: "Read Linear issue detail", category: "Linear" },
+  linear_create_issue: { label: "Create Linear issue", category: "Linear" },
+  linear_update_issue: { label: "Update Linear state, owner, priority", category: "Linear" },
+  linear_add_comment: { label: "Add Linear comment", category: "Linear" },
+  generate_diagram: { label: "Generate diagram and attach to Linear", category: "Visuals" },
+  post_slack_recap: { label: "Post standup recap", category: "Slack" },
+  consult_mnemo: { label: "Consult long-term meeting memory", category: "Mnemo" },
+};
+
+const NEXT_TOOL_IDEAS = [
+  {
+    name: "Calendar actions",
+    detail: "schedule follow-ups, create holds, and move recurring standups after approval",
+  },
+  {
+    name: "Slack context",
+    detail: "read recent channel/thread context and post recaps to chosen channels instead of one webhook",
+  },
+  {
+    name: "GitHub/PRs",
+    detail: "surface PR status, CI failures, deploy blockers, and link work back to Linear",
+  },
+  {
+    name: "Docs/decision log",
+    detail: "append decisions and action items to a living Google Doc, Notion page, or Mnemo memory",
+  },
+  {
+    name: "Email drafts",
+    detail: "draft customer or stakeholder follow-ups from meeting outcomes, never send without approval",
+  },
 ];
 
 export default function MeetingBotsDashboard() {
@@ -338,6 +373,38 @@ export default function MeetingBotsDashboard() {
             </div>
 
             <div className="min-w-0 overflow-y-auto border-l border-neutral-200 p-4">
+              <Section title="Enabled tools">
+                <div className="space-y-2">
+                  {scriberToolSpecs.map((spec) => {
+                    const meta = TOOL_LABELS[spec.name] ?? { label: spec.name, category: "Tool" };
+                    return (
+                      <div key={spec.name} className="rounded-md border border-neutral-200 bg-white p-3 text-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                              {meta.category}
+                            </div>
+                            <div className="mt-1 font-medium">{meta.label}</div>
+                          </div>
+                          <StatusPill status={spec.safety === "read" ? "read" : "approval"} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Section>
+
+              <Section title="Next tools">
+                <div className="space-y-2">
+                  {NEXT_TOOL_IDEAS.map((idea) => (
+                    <div key={idea.name} className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-sm">
+                      <div className="font-medium">{idea.name}</div>
+                      <div className="mt-1 text-xs leading-5 text-neutral-500">{idea.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+
               <Section title="Approvals">
                 {snapshot?.proposals.map((proposal) => (
                   <div key={proposal.id} className="rounded-md border border-neutral-200 bg-white p-3 text-sm">
@@ -410,7 +477,8 @@ function StatusPill({ status }: { status: string }) {
     status === "connected" ||
     status === "listening" ||
     status === "active" ||
-    status === "executed"
+    status === "executed" ||
+    status === "read"
       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
       : status === "error" || status === "failed" || status === "missing"
         ? "bg-red-50 text-red-700 border-red-200"
