@@ -130,6 +130,38 @@ https://app.usescriber.com/meetings
 
 Use the password from `SCRIBER_ACCESS_PASSWORD`, connect Google Calendar, and press Sync. Accepted future Zoom/Google Meet events are imported and scheduled two minutes before start.
 
+## Workspace Connections
+
+The MVP is still single-workspace, not multi-tenant. A teammate or assistant can use the shared access password, but the configured integrations are workspace-level credentials.
+
+Required baseline:
+
+```text
+OPENAI_API_KEY
+SCRIBER_ACCESS_PASSWORD
+SCRIBER_AUTH_SECRET
+SCRIBER_INTERNAL_API_TOKEN
+```
+
+Meeting/work tools:
+
+```text
+LINEAR_API_KEY
+LINEAR_TEAM_KEY
+SLACK_BOT_TOKEN
+SLACK_DEFAULT_CHANNEL_ID
+SLACK_WEBHOOK_URL
+GITHUB_TOKEN
+GITHUB_DEFAULT_REPO
+GOOGLE_CALENDAR_CLIENT_ID
+GOOGLE_CALENDAR_CLIENT_SECRET
+GOOGLE_CALENDAR_REDIRECT_URI
+```
+
+Slack context reading requires `SLACK_BOT_TOKEN` plus `SLACK_DEFAULT_CHANNEL_ID`, and the Slack app must be invited to that channel. Slack recap posting can use either `SLACK_WEBHOOK_URL` or the bot token/default channel.
+
+GitHub tools are read-only. Use a fine-grained token with pull-request/check read access for `GITHUB_DEFAULT_REPO`, for example `benikigai/scriber`.
+
 Google OAuth callback:
 
 ```text

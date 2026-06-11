@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { safeRedirectPath } from "../src/lib/authGate";
+import { isProtectedPath, safeRedirectPath } from "../src/lib/authGate";
 
 test("hosted runtime normalizes legacy console redirects to meetings", () => {
   const previousDomain = process.env.SCRIBER_DOMAIN;
@@ -35,4 +35,8 @@ test("local demo can still redirect to the browser console", () => {
   } finally {
     if (previousDomain !== undefined) process.env.SCRIBER_DOMAIN = previousDomain;
   }
+});
+
+test("connection setup status stays behind the auth gate", () => {
+  assert.equal(isProtectedPath("/api/connections/status"), true);
 });

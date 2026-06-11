@@ -32,3 +32,25 @@ test("write tools create pending proposals", async () => {
   const rejected = rejectToolProposal(proposal.id);
   assert.equal(rejected.status, "rejected");
 });
+
+test("calendar follow-up tool creates a pending proposal", async () => {
+  resetMeetingBotStoreForTests();
+  const bot = createMeetingBot({
+    meetingUrl: "https://meet.google.com/abc-defg-hij",
+    title: "Planning",
+  });
+
+  const result = await executeScriberTool({
+    toolName: "calendar_schedule_followup",
+    arguments: {
+      title: "Follow up on launch blockers",
+      starts_at: "2026-06-12T17:00:00.000Z",
+      duration_minutes: 30,
+    },
+    meetingBotId: bot.id,
+    source: "meeting",
+  });
+
+  assert.ok("requires_approval" in result);
+  assert.equal(result.requires_approval, true);
+});

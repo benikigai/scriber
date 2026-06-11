@@ -153,11 +153,116 @@ export const scriberToolSpecs = [
       type: "object",
       properties: {
         body: { type: "string", description: "Markdown recap body" },
+        channel_id: { type: "string", description: "Optional Slack channel ID override" },
       },
       required: ["body"],
       additionalProperties: false,
     },
     approvalTitle: () => "Post Slack recap",
+  },
+  {
+    name: "slack_recent_context",
+    description:
+      "Read recent Slack channel messages for meeting context. Use before or during standup when the team asks what changed in Slack or mentions a thread.",
+    safety: "read",
+    parameters: {
+      type: "object",
+      properties: {
+        channel_id: {
+          type: "string",
+          description: "Optional Slack channel ID; defaults to SLACK_DEFAULT_CHANNEL_ID",
+        },
+        query: {
+          type: "string",
+          description: "Optional text filter for recent messages",
+        },
+        limit: {
+          type: "number",
+          description: "How many messages to return, 1 to 30",
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    approvalTitle: () => "Read Slack context",
+  },
+  {
+    name: "github_list_pull_requests",
+    description:
+      "List recent pull requests for the default GitHub repo or a specified owner/name repo. Use when standup needs engineering status.",
+    safety: "read",
+    parameters: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Optional repo in owner/name form; defaults to GITHUB_DEFAULT_REPO",
+        },
+        state: {
+          type: "string",
+          description: 'open, closed, or all. Defaults to "open".',
+        },
+        limit: {
+          type: "number",
+          description: "How many PRs to return, 1 to 20",
+        },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+    approvalTitle: () => "Read GitHub pull requests",
+  },
+  {
+    name: "github_get_pull_request_status",
+    description:
+      "Get a pull request's mergeability, combined status, and check runs. Use when a PR or deploy blocker comes up in standup.",
+    safety: "read",
+    parameters: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Optional repo in owner/name form; defaults to GITHUB_DEFAULT_REPO",
+        },
+        number: {
+          type: "number",
+          description: "Pull request number",
+        },
+      },
+      required: ["number"],
+      additionalProperties: false,
+    },
+    approvalTitle: (args) => `Read GitHub PR #${String(args.number ?? "")}`.trim(),
+  },
+  {
+    name: "calendar_schedule_followup",
+    description:
+      "Propose creating a Google Calendar follow-up event from meeting outcomes. Never schedule without approval.",
+    safety: "proposal",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        starts_at: {
+          type: "string",
+          description: "ISO datetime for the follow-up start",
+        },
+        duration_minutes: {
+          type: "number",
+          description: "Duration in minutes. Defaults to 30.",
+        },
+        attendees: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional attendee emails",
+        },
+        description: { type: "string" },
+        location: { type: "string" },
+      },
+      required: ["title", "starts_at"],
+      additionalProperties: false,
+    },
+    approvalTitle: (args) => `Schedule follow-up: ${String(args.title ?? "Untitled")}`,
   },
   {
     name: "consult_mnemo",

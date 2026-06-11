@@ -4,6 +4,7 @@ const PROTECTED_PREFIXES = [
   "/console",
   "/meetings",
   "/api/calendar",
+  "/api/connections",
   "/api/meeting-bots",
   "/api/responses",
   "/api/session",

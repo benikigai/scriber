@@ -8,9 +8,11 @@ const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 const GOOGLE_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
 export const GOOGLE_CALENDAR_SCOPES = [
-  "https://www.googleapis.com/auth/calendar.events.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/userinfo.email",
 ] as const;
+
+export const GOOGLE_CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
 type GoogleTokenResponse = {
   access_token?: string;
@@ -147,6 +149,49 @@ export async function fetchUpcomingGoogleCalendarEvents(input: {
   const body = (await response.json()) as GoogleEventsResponse;
   if (!response.ok) throw new Error(body.error?.message ?? `Google Calendar returned ${response.status}`);
   return (body.items ?? []).map(googleEventToExternalCalendarEvent).filter(Boolean) as ExternalCalendarEvent[];
+}
+
+export async function createGoogleCalendarEvent(input: {
+  accessToken: string;
+  title: string;
+  description?: string | null;
+  startsAt: string;
+  endsAt: string;
+  attendees?: string[];
+  location?: string | null;
+}) {
+  const body = {
+    summary: input.title,
+    description: input.description ?? undefined,
+    location: input.location ?? undefined,
+    start: { dateTime: new Date(input.startsAt).toISOString() },
+    end: { dateTime: new Date(input.endsAt).toISOString() },
+    attendees: input.attendees?.filter(Boolean).map((email) => ({ email })),
+  };
+
+  const response = await fetch(GOOGLE_EVENTS_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const result = (await response.json()) as GoogleCalendarEvent & { htmlLink?: string; error?: { message?: string } };
+  if (!response.ok) {
+    throw new Error(result.error?.message ?? `Google Calendar create returned ${response.status}`);
+  }
+  return {
+    id: result.id,
+    title: result.summary ?? input.title,
+    url: result.htmlLink ?? null,
+    startsAt: googleDateToIso(result.start) ?? input.startsAt,
+    endsAt: googleDateToIso(result.end) ?? input.endsAt,
+  };
+}
+
+export function googleCalendarCanWrite(connection: GoogleCalendarConnection) {
+  return connection.scope.split(/\s+/).includes(GOOGLE_CALENDAR_WRITE_SCOPE);
 }
 
 export function googleEventToExternalCalendarEvent(event: GoogleCalendarEvent): ExternalCalendarEvent | null {

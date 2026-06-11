@@ -25,6 +25,18 @@ type CalendarStatus = {
   lastSyncedAt: string | null;
 };
 
+type ConnectionStatus = {
+  id: string;
+  name: string;
+  configured: boolean;
+  connected: boolean;
+  status: "connected" | "ready" | "missing" | "action_needed";
+  capabilities: string[];
+  env: string[];
+  action?: { label: string; href: string } | null;
+  notes?: string[] | null;
+};
+
 const COMMANDS: { type: BotCommandType; label: string }[] = [
   { type: "wake", label: "Wake" },
   { type: "quiet", label: "Quiet" },
@@ -42,29 +54,33 @@ const TOOL_LABELS: Record<string, { label: string; category: string }> = {
   linear_add_comment: { label: "Add Linear comment", category: "Linear" },
   generate_diagram: { label: "Generate diagram and attach to Linear", category: "Visuals" },
   post_slack_recap: { label: "Post standup recap", category: "Slack" },
+  slack_recent_context: { label: "Read recent Slack channel context", category: "Slack" },
+  github_list_pull_requests: { label: "List GitHub pull requests", category: "GitHub" },
+  github_get_pull_request_status: { label: "Read PR checks and merge state", category: "GitHub" },
+  calendar_schedule_followup: { label: "Schedule Google Calendar follow-up", category: "Calendar" },
   consult_mnemo: { label: "Consult long-term meeting memory", category: "Mnemo" },
 };
 
 const NEXT_TOOL_IDEAS = [
   {
-    name: "Calendar actions",
-    detail: "schedule follow-ups, create holds, and move recurring standups after approval",
-  },
-  {
-    name: "Slack context",
-    detail: "read recent channel/thread context and post recaps to chosen channels instead of one webhook",
-  },
-  {
-    name: "GitHub/PRs",
-    detail: "surface PR status, CI failures, deploy blockers, and link work back to Linear",
-  },
-  {
-    name: "Docs/decision log",
-    detail: "append decisions and action items to a living Google Doc, Notion page, or Mnemo memory",
+    name: "Decision log",
+    detail: "append approved decisions and action items to Google Docs, Notion, or Mnemo memory",
   },
   {
     name: "Email drafts",
     detail: "draft customer or stakeholder follow-ups from meeting outcomes, never send without approval",
+  },
+  {
+    name: "Project docs",
+    detail: "read specs, PRDs, and implementation notes before or during a meeting",
+  },
+  {
+    name: "Customer context",
+    detail: "pull account notes, support tickets, or CRM context into customer-facing calls",
+  },
+  {
+    name: "User invitations",
+    detail: "issue per-person access links once Scriber moves beyond the current shared internal password",
   },
 ];
 
@@ -73,6 +89,7 @@ export default function MeetingBotsDashboard() {
   const [snapshot, setSnapshot] = useState<MeetingBotSnapshot | null>(null);
   const [adapters, setAdapters] = useState<AdapterReadiness[]>([]);
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
+  const [connections, setConnections] = useState<ConnectionStatus[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [meetingUrl, setMeetingUrl] = useState("");
   const [title, setTitle] = useState("");
@@ -111,17 +128,20 @@ export default function MeetingBotsDashboard() {
 
   async function refresh() {
     setError(null);
-    const [botsResponse, adaptersResponse, calendarResponse] = await Promise.all([
+    const [botsResponse, adaptersResponse, calendarResponse, connectionsResponse] = await Promise.all([
       fetch("/api/meeting-bots"),
       fetch("/api/meeting-bots/adapters"),
       fetch("/api/calendar/google/status"),
+      fetch("/api/connections/status"),
     ]);
     const botsBody = await botsResponse.json();
     const adaptersBody = await adaptersResponse.json();
     const calendarBody = await calendarResponse.json();
+    const connectionsBody = await connectionsResponse.json();
     setBots(botsBody.bots ?? []);
     setAdapters(adaptersBody.adapters ?? []);
     setCalendarStatus(calendarBody);
+    setConnections(connectionsBody.connections ?? []);
     if (!selectedId && botsBody.bots?.[0]) setSelectedId(botsBody.bots[0].id);
     if (selectedId) await loadSnapshot(selectedId);
   }
@@ -234,6 +254,8 @@ export default function MeetingBotsDashboard() {
             </button>
             {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
           </form>
+
+          <ConnectionSetup connections={connections} />
 
           <div className="mt-6 space-y-2">
             <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm">
@@ -468,6 +490,54 @@ export default function MeetingBotsDashboard() {
         </section>
       </div>
     </main>
+  );
+}
+
+function ConnectionSetup({ connections }: { connections: ConnectionStatus[] }) {
+  const connected = connections.filter((connection) => connection.status === "connected").length;
+  const total = connections.length;
+
+  return (
+    <div className="mt-6 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-medium">Workspace setup</div>
+          <div className="mt-1 text-xs leading-5 text-neutral-500">
+            Shared internal credentials for now; one connected Google account powers workspace auto-join.
+          </div>
+        </div>
+        <StatusPill status={total && connected === total ? "connected" : "setup"} />
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {connections.map((connection) => (
+          <div key={connection.id} className="rounded-md border border-neutral-200 bg-white p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-medium">{connection.name}</div>
+              <StatusPill status={connection.status} />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {connection.env.map((env) => (
+                <span key={env} className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500">
+                  {env}
+                </span>
+              ))}
+            </div>
+            {connection.notes?.length ? (
+              <div className="mt-2 text-xs leading-5 text-neutral-500">{connection.notes[0]}</div>
+            ) : null}
+            {connection.action ? (
+              <a
+                href={connection.action.href}
+                className="mt-2 inline-flex rounded-md bg-neutral-950 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
+              >
+                {connection.action.label}
+              </a>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

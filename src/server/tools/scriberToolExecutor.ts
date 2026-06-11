@@ -5,6 +5,17 @@ import { getScriberToolSpec, scriberToolSpecs } from "@/lib/scriberToolSpecs";
 import { linear, defaultTeamId, resolveUserId } from "@/lib/linear";
 import { attachBytesToIssue } from "@/lib/linearAttach";
 import {
+  createGoogleCalendarEvent,
+  googleCalendarCanWrite,
+  refreshGoogleCalendarConnection,
+} from "@/server/calendar/google";
+import {
+  getGoogleCalendarConnection,
+  saveGoogleCalendarConnection,
+} from "@/server/calendar/googleConnectionStore";
+import { getGitHubPullRequestStatus, listGitHubPullRequests } from "@/server/tools/github";
+import { fetchRecentSlackContext, postSlackMessage } from "@/server/tools/slack";
+import {
   createToolProposal,
   getToolProposal,
   updateToolProposal,
@@ -149,26 +160,20 @@ async function postSlackRecap(args: Record<string, unknown>) {
   const body = String(args.body ?? "").trim();
   if (!body) throw new Error("body required");
 
-  const webhook = process.env.SLACK_WEBHOOK_URL;
-  if (!webhook) {
+  if (!process.env.SLACK_WEBHOOK_URL && !process.env.SLACK_BOT_TOKEN) {
     console.log("[scriber/slack] SLACK_WEBHOOK_URL unset - recap logged only:");
     console.log(body);
     return {
       success: false,
       delivered: false,
-      reason: "SLACK_WEBHOOK_URL not configured; recap logged to server stdout only",
+      reason: "Slack is not configured; recap logged to server stdout only",
     };
   }
 
-  const response = await fetch(webhook, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: body }),
+  return postSlackMessage({
+    body,
+    channelId: typeof args.channel_id === "string" ? args.channel_id : null,
   });
-  if (!response.ok) {
-    return { success: false, delivered: false, status: response.status };
-  }
-  return { success: true, delivered: true };
 }
 
 async function fallbackDiagramBytes(): Promise<Buffer | null> {
@@ -248,6 +253,40 @@ async function consultMnemo(args: Record<string, unknown>) {
   return { whisper: text };
 }
 
+async function scheduleCalendarFollowup(args: Record<string, unknown>) {
+  const title = String(args.title ?? "").trim();
+  const startsAt = String(args.starts_at ?? "").trim();
+  if (!title || !startsAt) throw new Error("title and starts_at required");
+
+  const start = new Date(startsAt);
+  if (Number.isNaN(start.getTime())) throw new Error("starts_at must be a valid datetime");
+  const durationMinutes = boundedNumber(args.duration_minutes, 30, 5, 240);
+  const end = new Date(start.getTime() + durationMinutes * 60_000);
+
+  const existing = getGoogleCalendarConnection();
+  if (!existing) throw new Error("Google Calendar is not connected");
+  const refreshed = await refreshGoogleCalendarConnection(existing);
+  if (!googleCalendarCanWrite(refreshed)) {
+    saveGoogleCalendarConnection(refreshed);
+    throw new Error("Reconnect Google Calendar to grant event write access");
+  }
+
+  const attendees = Array.isArray(args.attendees)
+    ? args.attendees.map((email) => String(email).trim()).filter(Boolean)
+    : [];
+  const result = await createGoogleCalendarEvent({
+    accessToken: refreshed.accessToken,
+    title,
+    startsAt: start.toISOString(),
+    endsAt: end.toISOString(),
+    attendees,
+    description: typeof args.description === "string" ? args.description : null,
+    location: typeof args.location === "string" ? args.location : null,
+  });
+  saveGoogleCalendarConnection({ ...refreshed, updatedAt: new Date().toISOString() });
+  return { success: true, event: result };
+}
+
 export function realtimeToolDefinitions() {
   return scriberToolSpecs.map((spec) => ({
     type: "function",
@@ -287,6 +326,12 @@ export async function executeScriberTool(input: {
       return searchLinearIssues(input.arguments);
     case "linear_get_issue":
       return getLinearIssue(input.arguments);
+    case "slack_recent_context":
+      return fetchRecentSlackContext(input.arguments);
+    case "github_list_pull_requests":
+      return listGitHubPullRequests(input.arguments);
+    case "github_get_pull_request_status":
+      return getGitHubPullRequestStatus(input.arguments);
     case "consult_mnemo":
       return consultMnemo(input.arguments);
     default:
@@ -321,6 +366,9 @@ export async function approveAndExecuteToolProposal(id: string) {
       case "post_slack_recap":
         result = await postSlackRecap(proposal.arguments);
         break;
+      case "calendar_schedule_followup":
+        result = await scheduleCalendarFollowup(proposal.arguments);
+        break;
       default:
         throw new Error(`No write executor for ${proposal.toolName}`);
     }
@@ -339,4 +387,10 @@ export function rejectToolProposal(id: string) {
   if (!proposal) throw new Error("tool proposal not found");
   if (proposal.status !== "pending") return proposal;
   return updateToolProposal(id, { status: "rejected", error: null })!;
+}
+
+function boundedNumber(value: unknown, fallback: number, min: number, max: number) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(Math.max(Math.trunc(number), min), max);
 }
