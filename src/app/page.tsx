@@ -23,7 +23,7 @@ export default async function Page({
 }) {
   const params = await searchParams;
   if (params.agentConfig) {
-    redirect(`/console?agentConfig=${encodeURIComponent(String(params.agentConfig))}`);
+    redirect("/meetings");
   }
 
   return (
@@ -51,8 +51,8 @@ export default async function Page({
             <Link href="/meetings" className="hover:text-[#f7f8f5]">
               Runtime
             </Link>
-            <Link href="/console?agentConfig=scriber" className="hover:text-[#f7f8f5]">
-              Console
+            <Link href="/meetings" className="hover:text-[#f7f8f5]">
+              Sign in
             </Link>
           </div>
         </nav>
@@ -75,10 +75,10 @@ export default async function Page({
               Review runtime
             </Link>
             <Link
-              href="/console?agentConfig=scriber"
+              href="/meetings"
               className="rounded-full border border-[#d9dde5]/30 px-6 py-3 text-sm font-medium text-[#f7f8f5] transition hover:border-[#ff7a5c] hover:text-[#ff7a5c]"
             >
-              Open console
+              Connect calendar
             </Link>
           </div>
         </div>

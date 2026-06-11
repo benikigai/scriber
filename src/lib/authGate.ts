@@ -59,5 +59,12 @@ export function safeRedirectPath(value: FormDataEntryValue | string | null | und
   const path = typeof value === "string" ? value : "/meetings";
   if (!path.startsWith("/") || path.startsWith("//")) return "/meetings";
   if (path.startsWith("/login")) return "/meetings";
+  if (prefersHostedRuntime() && (path === "/console" || path.startsWith("/console?") || path.startsWith("/console/"))) {
+    return "/meetings";
+  }
   return path;
+}
+
+function prefersHostedRuntime() {
+  return Boolean(process.env.SCRIBER_DOMAIN) && process.env.SCRIBER_ALLOW_CONSOLE_REDIRECTS !== "true";
 }

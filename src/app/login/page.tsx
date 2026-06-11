@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { safeRedirectPath } from "@/lib/authGate";
 
 export default async function LoginPage({
   searchParams,
@@ -6,7 +7,7 @@ export default async function LoginPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const next = typeof params.next === "string" ? params.next : "/meetings";
+  const next = safeRedirectPath(typeof params.next === "string" ? params.next : undefined);
   const hasError = params.error === "1";
   const missingConfig = params.configured === "0";
 
