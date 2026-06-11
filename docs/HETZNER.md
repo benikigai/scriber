@@ -55,6 +55,8 @@ https://www.googleapis.com/auth/userinfo.email
 
 ## Deploy
 
+For a clean server where Scriber owns HTTPS:
+
 ```bash
 cp deploy/hetzner/.env.example deploy/hetzner/.env
 $EDITOR deploy/hetzner/.env
@@ -62,10 +64,28 @@ docker compose -f deploy/hetzner/docker-compose.yml up -d --build
 docker compose -f deploy/hetzner/docker-compose.yml logs -f web bridge worker
 ```
 
-Then open:
+For an existing server that already runs Caddy or another reverse proxy, do not start Scriber-managed Caddy. Bind Scriber web to localhost and add the proxy route yourself:
+
+```bash
+docker compose \
+  -f deploy/hetzner/docker-compose.yml \
+  -f deploy/hetzner/docker-compose.existing-caddy.yml \
+  up -d --build web bridge worker
+```
+
+Existing Caddy route:
+
+```caddyfile
+app.usescriber.com {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:3000
+}
+```
+
+Then open the host you routed:
 
 ```text
-https://www.usescriber.com/meetings
+https://app.usescriber.com/meetings
 ```
 
 Use the password from `SCRIBER_ACCESS_PASSWORD`, connect Google Calendar, and press Sync. Accepted future Zoom/Google Meet events are imported and scheduled two minutes before start.
