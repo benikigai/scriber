@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "bridge": "tsx src/server/bridge/server.ts",
+    "worker": "tsx src/server/worker/scheduler.ts",
     "meet-runtime": "tsx src/server/botRuntime/googleMeetRuntime.ts",
     "zoom-runtime": "tsx src/server/botRuntime/zoomSdkRuntime.ts",
     "build": "next build",

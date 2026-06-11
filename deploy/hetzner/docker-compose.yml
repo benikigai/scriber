@@ -1,0 +1,64 @@
+services:
+  web:
+    build:
+      context: ../..
+    env_file:
+      - .env
+    environment:
+      SCRIBER_DATA_DIR: /data
+      PORT: 3000
+    volumes:
+      - scriber-data:/data
+    restart: unless-stopped
+
+  bridge:
+    build:
+      context: ../..
+    command: npm run bridge
+    env_file:
+      - .env
+    environment:
+      SCRIBER_WEB_ORIGIN: http://web:3000
+      BOT_BRIDGE_PORT: 8787
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+    command: npm run worker
+    env_file:
+      - .env
+    environment:
+      SCRIBER_DATA_DIR: /data
+      SCRIBER_WORKER_WEB_ORIGIN: http://web:3000
+      SCRIBER_BRIDGE_URL: ws://bridge:8787
+      SCRIBER_CHROME_EXECUTABLE_PATH: /usr/bin/chromium
+      SCRIBER_GOOGLE_PROFILE_DIR: /data/google-profile
+    volumes:
+      - scriber-data:/data
+    depends_on:
+      - web
+      - bridge
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  scriber-data:
+  caddy-data:
+  caddy-config:

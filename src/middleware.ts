@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AUTH_COOKIE, isProtectedPath, isValidAuthCookie } from "@/lib/authGate";
+import {
+  AUTH_COOKIE,
+  bearerToken,
+  isProtectedPath,
+  isValidAuthCookie,
+  isValidInternalApiToken,
+} from "@/lib/authGate";
 
 export async function middleware(req: NextRequest) {
   if (!isProtectedPath(req.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+
+  if (
+    req.nextUrl.pathname.startsWith("/api/") &&
+    isValidInternalApiToken(bearerToken(req.headers.get("authorization")))
+  ) {
     return NextResponse.next();
   }
 

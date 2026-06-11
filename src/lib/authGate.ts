@@ -3,7 +3,6 @@ export const AUTH_COOKIE = "scriber_auth";
 const PROTECTED_PREFIXES = [
   "/console",
   "/meetings",
-  "/api/bot-bridge",
   "/api/calendar",
   "/api/meeting-bots",
   "/api/responses",
@@ -43,6 +42,17 @@ export async function isValidAuthCookie(value?: string | null) {
     mismatch |= expected.charCodeAt(index) ^ value.charCodeAt(index);
   }
   return mismatch === 0;
+}
+
+export function isValidInternalApiToken(value?: string | null) {
+  const expected = process.env.SCRIBER_INTERNAL_API_TOKEN;
+  if (!expected || !value) return false;
+  return value === expected;
+}
+
+export function bearerToken(value?: string | null) {
+  if (value?.toLowerCase().startsWith("bearer ")) return value.slice("bearer ".length).trim();
+  return null;
 }
 
 export function safeRedirectPath(value: FormDataEntryValue | string | null | undefined) {

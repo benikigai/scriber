@@ -1,4 +1,6 @@
 import { randomUUID } from "crypto";
+import fs from "fs";
+import path from "path";
 import type {
   BotCommand,
   BotCommandType,
@@ -29,21 +31,53 @@ type StoreState = {
   listeners: Set<Listener>;
 };
 
+type StoreDiskSnapshot = {
+  bots?: MeetingBotRecord[];
+  transcripts?: Record<string, TranscriptEntry[]>;
+  participants?: Record<string, ParticipantRecord[]>;
+  artifacts?: Record<string, MeetingArtifact[]>;
+  proposals?: ToolProposalRecord[];
+  commands?: Record<string, BotCommand[]>;
+  calendarEvents?: CalendarEventRecord[];
+};
+
 const STORE_SYMBOL = Symbol.for("scriber.meetingBotStore");
 
 function now() {
   return new Date().toISOString();
 }
 
+function storeFilePath() {
+  if (process.env.SCRIBER_STORE_FILE) return process.env.SCRIBER_STORE_FILE;
+  if (process.env.SCRIBER_DATA_DIR) return path.join(process.env.SCRIBER_DATA_DIR, "meeting-store.json");
+  return null;
+}
+
+function mapFromRecord<T>(record: Record<string, T[]> | undefined) {
+  return new Map(Object.entries(record ?? {}));
+}
+
+function loadDiskSnapshot(): StoreDiskSnapshot | null {
+  const filePath = storeFilePath();
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8")) as StoreDiskSnapshot;
+  } catch (error: any) {
+    console.warn(`[scriber/store] failed to read ${filePath}: ${error?.message ?? error}`);
+    return null;
+  }
+}
+
 function makeState(): StoreState {
+  const snapshot = loadDiskSnapshot();
   return {
-    bots: new Map(),
-    transcripts: new Map(),
-    participants: new Map(),
-    artifacts: new Map(),
-    proposals: new Map(),
-    commands: new Map(),
-    calendarEvents: new Map(),
+    bots: new Map((snapshot?.bots ?? []).map((bot) => [bot.id, bot])),
+    transcripts: mapFromRecord(snapshot?.transcripts),
+    participants: mapFromRecord(snapshot?.participants),
+    artifacts: mapFromRecord(snapshot?.artifacts),
+    proposals: new Map((snapshot?.proposals ?? []).map((proposal) => [proposal.id, proposal])),
+    commands: mapFromRecord(snapshot?.commands),
+    calendarEvents: new Map((snapshot?.calendarEvents ?? []).map((event) => [event.id, event])),
     listeners: new Set(),
   };
 }
@@ -57,6 +91,30 @@ function state(): StoreState {
 function publish(event: MeetingBotEvent) {
   for (const listener of state().listeners) {
     listener(event);
+  }
+}
+
+function persistState() {
+  const filePath = storeFilePath();
+  if (!filePath) return;
+
+  try {
+    const store = state();
+    const snapshot: StoreDiskSnapshot = {
+      bots: Array.from(store.bots.values()),
+      transcripts: Object.fromEntries(store.transcripts.entries()),
+      participants: Object.fromEntries(store.participants.entries()),
+      artifacts: Object.fromEntries(store.artifacts.entries()),
+      proposals: Array.from(store.proposals.values()),
+      commands: Object.fromEntries(store.commands.entries()),
+      calendarEvents: Array.from(store.calendarEvents.values()),
+    };
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const tempPath = `${filePath}.${process.pid}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(snapshot, null, 2), { mode: 0o600 });
+    fs.renameSync(tempPath, filePath);
+  } catch (error: any) {
+    console.warn(`[scriber/store] failed to persist state: ${error?.message ?? error}`);
   }
 }
 
@@ -138,6 +196,7 @@ export function createMeetingBot(input: CreateMeetingBotInput) {
     artifactCaptureIntervalSeconds: 15,
   };
   state().bots.set(bot.id, bot);
+  persistState();
   publish({ type: "meeting_bot.created", bot });
   return bot;
 }
@@ -155,6 +214,7 @@ export function updateMeetingBot(
     updatedAt: now(),
   };
   store.bots.set(id, updated);
+  persistState();
   publish({ type: "meeting_bot.updated", bot: updated });
   return updated;
 }
@@ -173,6 +233,7 @@ export function enqueueBotCommand(meetingBotId: string, type: BotCommandType, te
   const commands = state().commands.get(meetingBotId) ?? [];
   commands.push(command);
   state().commands.set(meetingBotId, commands);
+  persistState();
 
   if (type === "quiet") updateMeetingBot(meetingBotId, { status: "quiet", wakeMode: "listen_only", muted: true });
   if (type === "wake") updateMeetingBot(meetingBotId, { status: "active", wakeMode: "wake", muted: false });
@@ -187,6 +248,7 @@ export function enqueueBotCommand(meetingBotId: string, type: BotCommandType, te
 export function drainBotCommands(meetingBotId: string) {
   const commands = state().commands.get(meetingBotId) ?? [];
   state().commands.set(meetingBotId, []);
+  persistState();
   return commands;
 }
 
@@ -209,6 +271,7 @@ export function addTranscriptEntry(input: {
   const transcript = state().transcripts.get(input.meetingBotId) ?? [];
   transcript.push(entry);
   state().transcripts.set(input.meetingBotId, transcript.slice(-500));
+  persistState();
   publish({ type: "transcript.added", entry });
   return entry;
 }
@@ -248,6 +311,7 @@ export function upsertParticipant(input: {
     ? participants.map((existing) => (existing.id === participant.id ? participant : existing))
     : [...participants, participant];
   state().participants.set(input.meetingBotId, next);
+  persistState();
   publish({ type: "participant.updated", participant });
   return participant;
 }
@@ -275,6 +339,7 @@ export function addMeetingArtifact(input: {
   const artifacts = state().artifacts.get(input.meetingBotId) ?? [];
   artifacts.push(artifact);
   state().artifacts.set(input.meetingBotId, artifacts.slice(-200));
+  persistState();
   publish({ type: "artifact.added", artifact });
   return artifact;
 }
@@ -301,6 +366,7 @@ export function createToolProposal(input: {
     updatedAt: createdAt,
   };
   state().proposals.set(proposal.id, proposal);
+  persistState();
   publish({ type: "tool_proposal.created", proposal });
   return proposal;
 }
@@ -317,12 +383,14 @@ export function updateToolProposal(
     updatedAt: now(),
   };
   state().proposals.set(id, proposal);
+  persistState();
   publish({ type: "tool_proposal.updated", proposal });
   return proposal;
 }
 
 export function upsertCalendarEvent(event: CalendarEventRecord) {
   state().calendarEvents.set(event.id, event);
+  persistState();
   return event;
 }
 
@@ -393,7 +461,8 @@ export function applyBotBridgeMessage(meetingBotId: string, message: IncomingBot
         endedAt: message.status === "ended" ? now() : bot.endedAt,
       });
     case "audio.input":
-      return updateMeetingBot(meetingBotId, { status: bot.status === "staged" ? "listening" : bot.status });
+      if (bot.status === "staged") return updateMeetingBot(meetingBotId, { status: "listening" });
+      return null;
     default:
       return null;
   }

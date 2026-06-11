@@ -17,6 +17,13 @@ type AdapterReadiness = {
   capabilities: string[];
 };
 
+type CalendarStatus = {
+  configured: boolean;
+  connected: boolean;
+  email: string | null;
+  lastSyncedAt: string | null;
+};
+
 const COMMANDS: { type: BotCommandType; label: string }[] = [
   { type: "wake", label: "Wake" },
   { type: "quiet", label: "Quiet" },
@@ -30,11 +37,13 @@ export default function MeetingBotsDashboard() {
   const [bots, setBots] = useState<MeetingBotRecord[]>([]);
   const [snapshot, setSnapshot] = useState<MeetingBotSnapshot | null>(null);
   const [adapters, setAdapters] = useState<AdapterReadiness[]>([]);
+  const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [meetingUrl, setMeetingUrl] = useState("");
   const [title, setTitle] = useState("");
   const [joinAt, setJoinAt] = useState("");
   const [manualSpeak, setManualSpeak] = useState("");
+  const [calendarSyncing, setCalendarSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -67,14 +76,17 @@ export default function MeetingBotsDashboard() {
 
   async function refresh() {
     setError(null);
-    const [botsResponse, adaptersResponse] = await Promise.all([
+    const [botsResponse, adaptersResponse, calendarResponse] = await Promise.all([
       fetch("/api/meeting-bots"),
       fetch("/api/meeting-bots/adapters"),
+      fetch("/api/calendar/google/status"),
     ]);
     const botsBody = await botsResponse.json();
     const adaptersBody = await adaptersResponse.json();
+    const calendarBody = await calendarResponse.json();
     setBots(botsBody.bots ?? []);
     setAdapters(adaptersBody.adapters ?? []);
+    setCalendarStatus(calendarBody);
     if (!selectedId && botsBody.bots?.[0]) setSelectedId(botsBody.bots[0].id);
     if (selectedId) await loadSnapshot(selectedId);
   }
@@ -127,6 +139,28 @@ export default function MeetingBotsDashboard() {
     if (selectedId) await loadSnapshot(selectedId);
   }
 
+  async function syncGoogleCalendar() {
+    setCalendarSyncing(true);
+    setError(null);
+    const response = await fetch("/api/calendar/google/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ days: 30 }),
+    });
+    const body = await response.json();
+    setCalendarSyncing(false);
+    if (!response.ok) {
+      setError(body.error ?? "Calendar sync failed");
+      return;
+    }
+    await refresh();
+  }
+
+  async function disconnectGoogleCalendar() {
+    await fetch("/api/calendar/google/disconnect", { method: "POST" });
+    await refresh();
+  }
+
   return (
     <main className="min-h-screen bg-neutral-50 text-neutral-950">
       <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-4">
@@ -167,6 +201,58 @@ export default function MeetingBotsDashboard() {
           </form>
 
           <div className="mt-6 space-y-2">
+            <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="font-medium">Google Calendar</div>
+                  <div className="mt-1 text-xs text-neutral-500">
+                    {calendarStatus?.connected
+                      ? calendarStatus.email
+                      : calendarStatus?.configured
+                        ? "Not connected"
+                        : "OAuth not configured"}
+                  </div>
+                </div>
+                <StatusPill
+                  status={
+                    calendarStatus?.connected ? "connected" : calendarStatus?.configured ? "ready" : "missing"
+                  }
+                />
+              </div>
+              {calendarStatus?.lastSyncedAt ? (
+                <div className="mt-2 text-xs text-neutral-500">
+                  Synced {new Date(calendarStatus.lastSyncedAt).toLocaleString()}
+                </div>
+              ) : null}
+              <div className="mt-3 flex gap-2">
+                {calendarStatus?.connected ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void syncGoogleCalendar()}
+                      className="rounded-md bg-neutral-950 px-3 py-2 text-xs font-medium text-white hover:bg-neutral-800"
+                    >
+                      {calendarSyncing ? "Syncing" : "Sync"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void disconnectGoogleCalendar()}
+                      className="rounded-md border border-neutral-300 px-3 py-2 text-xs hover:bg-white"
+                    >
+                      Disconnect
+                    </button>
+                  </>
+                ) : (
+                  <a
+                    href="/api/calendar/google/connect"
+                    className="rounded-md bg-neutral-950 px-3 py-2 text-xs font-medium text-white hover:bg-neutral-800"
+                  >
+                    Connect
+                  </a>
+                )}
+              </div>
+            </div>
+
             {bots.map((bot) => (
               <button
                 key={bot.id}
@@ -320,7 +406,11 @@ export default function MeetingBotsDashboard() {
 
 function StatusPill({ status }: { status: string }) {
   const color =
-    status === "ready" || status === "listening" || status === "active" || status === "executed"
+    status === "ready" ||
+    status === "connected" ||
+    status === "listening" ||
+    status === "active" ||
+    status === "executed"
       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
       : status === "error" || status === "failed" || status === "missing"
         ? "bg-red-50 text-red-700 border-red-200"
