@@ -3,10 +3,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 const meetingSteps = [
-  "Joins Zoom and Google Meet as Scriber",
-  "Listens for names, decisions, blockers, and action items",
-  "Speaks only when addressed or woken from the console",
-  "Queues Linear and Slack writes for approval",
+  "Sign in to the private Scriber app",
+  "Connect Google Calendar or paste a meeting link",
+  "Scriber joins Zoom or Google Meet as a visible participant",
+  "Approve Linear, Slack, GitHub, or calendar actions before they run",
 ];
 
 const signals = [
@@ -15,6 +15,8 @@ const signals = [
   { label: "Presence", value: "visible meeting participant" },
   { label: "Memory", value: "Mnemo context whisper" },
 ];
+
+const appHref = "https://app.usescriber.com/meetings";
 
 export default async function Page({
   searchParams,
@@ -48,12 +50,12 @@ export default async function Page({
             Scriber
           </Link>
           <div className="flex items-center gap-5 text-sm text-[#c7ccd4]/75">
-            <Link href="/meetings" className="hover:text-[#f7f8f5]">
-              Runtime
+            <Link href="#how-it-works" className="hover:text-[#f7f8f5]">
+              How it works
             </Link>
-            <Link href="/meetings" className="hover:text-[#f7f8f5]">
+            <a href={appHref} className="hover:text-[#f7f8f5]">
               Sign in
-            </Link>
+            </a>
           </div>
         </nav>
 
@@ -68,17 +70,17 @@ export default async function Page({
             A meeting agent that joins the call, listens for decisions, responds when invited, and keeps the work moving without pretending the meeting is the work.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
-            <Link
-              href="/meetings"
+            <a
+              href={appHref}
               className="rounded-full bg-[#4d63ff] px-6 py-3 text-sm font-medium text-white transition hover:bg-[#384de0]"
             >
-              Review runtime
-            </Link>
+              Open Scriber
+            </a>
             <Link
-              href="/meetings"
+              href="#how-it-works"
               className="rounded-full border border-[#d9dde5]/30 px-6 py-3 text-sm font-medium text-[#f7f8f5] transition hover:border-[#ff7a5c] hover:text-[#ff7a5c]"
             >
-              Connect calendar
+              See how it works
             </Link>
           </div>
         </div>
@@ -95,14 +97,14 @@ export default async function Page({
         </div>
       </section>
 
-      <section className="bg-[#f2f4f0] px-6 py-20 text-[#101214]">
+      <section id="how-it-works" className="bg-[#f2f4f0] px-6 py-20 text-[#101214]">
         <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.86fr_1.14fr]">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.24em] text-[#4d63ff]">
-              Built for live calls
+              From calendar to call
             </p>
             <h2 className="mt-4 max-w-xl font-sans text-5xl font-semibold leading-[0.94] tracking-normal md:text-7xl">
-              The teammate who remembers the meeting.
+              Start with sign-in. Connect calendar inside the app.
             </h2>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
@@ -120,14 +122,14 @@ export default async function Page({
         <div className="mx-auto grid max-w-7xl gap-10 md:grid-cols-[1fr_1.2fr]">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.24em] text-[#f4b740]">
-              Placeholder while the runtime hardens
+              Meeting runtime
             </p>
             <h2 className="mt-4 font-sans text-5xl font-semibold leading-[0.95] tracking-normal md:text-7xl">
               Quiet by default. Useful on purpose.
             </h2>
           </div>
           <div className="self-end text-lg leading-8 text-[#d9dde5]/75">
-            Scriber is being built as a visible Zoom and Google Meet participant with realtime voice, normalized transcripts, screen-share capture, and approval-first tool use. The public site will grow from here as the runtime becomes something teams can invite into real calls.
+            Scriber is a visible Zoom and Google Meet participant with realtime voice, normalized transcripts, screen-share capture, and approval-first tool use. Calendar connection, manual meeting links, and workspace tools all live in the private app.
           </div>
         </div>
       </section>
