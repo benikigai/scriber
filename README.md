@@ -1,105 +1,73 @@
 # Scriber
 
-> A two-agent voice architecture for real-time standup facilitation.
+**An AI meeting agent that runs your standup and acts during the call, not after it.**
 
-Built for **OpenAI Voice Hack Night**, Cerebral Valley — Wed May 27 2026.
+> **Status:** Started at OpenAI Voice Hack Night (Cerebral Valley), San Francisco, 2026-05-27. Extended in June 2026 into a hosted beta with a Google Meet bot runtime at [usescriber.com](https://usescriber.com). No commits since 2026-06-12.
 
----
+[usescriber.com](https://usescriber.com) · [Hackathon dashboard (Vercel)](https://scriber-nine.vercel.app)
 
-## Thesis
+## What it does
 
-Every existing meeting AI (Spinach, Otter, Fireflies, Fellow, MeetGeek) is **passive-then-active**: it listens, then post-meeting it acts. Scriber flips this. The agent **acts during the conversation**, with the Linear board visibly mutating live. A second silent agent runs in parallel, holds long-term cross-standup memory, and whispers tactical guidance.
+Most meeting AI is passive: it listens, then acts after the meeting. Scriber acts *during* the conversation, with the Linear board visibly changing as people talk.
 
-This is a primitive nobody has shipped: **a two-agent voice architecture where one agent runs the meeting and another remembers everything across meetings.**
+- Opens the standup and prompts each teammate by name: what they did, what's next, what's blocking them.
+- Executes Linear actions live: create and update tickets, change status, assignee and priority, add comments.
+- Generates diagrams with `gpt-image-1` and attaches them to tickets during the call.
+- Posts a spoken and Slack recap at the end.
+- Respects mode switches: *"Scriber, listen only"*, *"Scriber, quiet"*, *"Hey Scriber"*, *"Scriber, you're back"*.
 
-## The Two Agents
+A second, silent agent, **Mnemo**, runs alongside as a supervisor. It never speaks into the call; it reads the transcript, checks prior commitments in memory and whispers guidance to Scriber (*"Looks like Ben committed to spiking this Tuesday — should we reassign?"*).
 
-| Agent | Role | Voice | Model | Reasoning |
-|---|---|---|---|---|
-| **Scriber** | Facilitator — joins the call, prompts each speaker, executes tools live | `cedar` | `gpt-realtime-2` | `medium` (low latency) |
-| **Mnemo** | Supervisor — never speaks into the call, whispers guidance to Scriber over a side-channel | silent (text only) | `gpt-realtime-2` | `xhigh` (deep thinking) |
+## How it works
 
-Scriber moves fast and talks. Mnemo thinks deep and remembers. They share state over a WebSocket.
+| Agent | Role | Model | Reasoning |
+|---|---|---|---|
+| **Scriber** | Facilitator: speaks, runs tools | OpenAI Realtime (`gpt-realtime-2`) over WebRTC | medium (low latency) |
+| **Mnemo** | Supervisor: silent, text only | OpenAI Realtime, text | xhigh |
 
-## What Scriber Does Live
+```
+Meet / Zoom call  <── audio ──>  Scriber (Realtime voice agent)
+                                   ├── tools: Linear, diagram (gpt-image-1), Slack
+                                   ├── wake-word state machine: ALWAYS_ON → LISTEN → ACTIVE → QUIET
+                                   └── WebSocket ⇄ Mnemo (supervisor; memory + whispers)
+Dashboard: live transcript, mode, tool-call cards
+```
 
-- Joins Google Meet / Zoom as a participant
-- Opens standup, prompts each teammate by name
-- Listens for: what they did, what they're doing, what's blocking them
-- **Executes Linear actions as the conversation happens**:
-  - Creates / updates tickets
-  - Changes status, assignee, priority
-  - Adds comments with markdown
-  - Generates diagrams via `gpt-image-1` and attaches them to tickets
-- Posts a verbal + Slack recap at the end
-- Respects mode switches: `Scriber, listen only` / `Scriber, quiet` / `Hey Scriber` / `Scriber, you're back`
+**Hackathon version (May 27):** a browser page joined the call through a virtual audio device (BlackHole on macOS); Mnemo was a Bun sidecar with a mock JSON memory (`mnemo/memory.json`).
 
-## Demo
+**Hosted version (June):** a Next.js app with a password-gated dashboard, a Google Meet bot runtime (Playwright + Chromium) with a Realtime WebSocket bridge, a scheduler worker, Google Calendar sync, connector onboarding and approve/reject tool proposals. It ran via Docker Compose behind Caddy on a dedicated cloud host (runbook in [`docs/HETZNER.md`](docs/HETZNER.md)). A Zoom SDK runtime is stubbed.
 
-3-minute submission video shows:
-1. Standup opens, Scriber prompts the team
-2. Blocker mentioned → ticket updated live on a visible Linear board
-3. Visual idea surfaces → Scriber generates a diagram via `gpt-image-1` → attaches to ticket → **image appears on the ticket in the Linear UI during the call**
-4. Mnemo whispers historical context → Scriber voices it: *"Looks like Ben committed to spiking this Tuesday — should we reassign?"*
-5. Mode switch: *"Scriber, quiet"* → silence → *"Scriber, you're back"* → resume
-6. Standup wraps. Verbal recap. Slack message appears.
+Full diagram and data flow: [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Quickstart
+## Stack
 
-> Pre-built on macOS with BlackHole 2ch for audio routing into Meet/Zoom.
+Next.js 15 · React 19 · TypeScript · OpenAI Realtime API + Agents SDK · `gpt-image-1` · Linear SDK · Slack webhooks · Playwright · WebSockets · Docker Compose + Caddy. Based on OpenAI's [openai-realtime-agents](https://github.com/openai/openai-realtime-agents) example.
+
+## Run locally
 
 ```bash
-# 1. Install audio bridge (one-time)
-brew install --cask blackhole-2ch
-# Open Audio MIDI Setup → create Multi-Output Device (BlackHole + Built-in Speakers)
+npm install
+cp .env.example .env.local   # OPENAI_API_KEY, LINEAR_API_KEY, SLACK_WEBHOOK_URL, ...
 
-# 2. Clone + install
-git clone https://github.com/benikigai/scriber.git
-cd scriber
-bun install
-
-# 3. Configure
-cp .env.example .env.local
-# Fill: OPENAI_API_KEY, LINEAR_API_KEY, SLACK_WEBHOOK_URL
-
-# 4. Run
-bun dev                 # Scriber + UI on :3000
-bun run mnemo           # Mnemo supervisor sidecar (in a second terminal)
-
-# 5. In your browser
-# - Set mic to BlackHole 2ch, output to Multi-Output Device
-# - Join your Meet/Zoom call with the same audio settings
-# - Scriber is now in the meeting
+npm run dev                  # dashboard + Scriber on http://localhost:3000
+npm run bridge               # Realtime bridge (hosted runtime)
+npm run worker               # meeting scheduler (hosted runtime)
+npm run meet-runtime         # Google Meet bot
+npm test
 ```
 
-## Repo Layout
+For the original hackathon setup (browser joins the call directly), route a virtual audio device such as BlackHole 2ch as the browser's mic and a multi-output device as its speaker; see [`docs/DEMO.md`](docs/DEMO.md).
 
-```
-scriber/
-├── README.md              ← you are here
-├── ARCHITECTURE.md        ← system diagram + data flow + audio routing
-├── docs/specs/
-│   ├── scriber.md         ← full approved spec (from /spec)
-│   ├── scriber-yolo.md    ← task checkboxes for /yolo
-│   ├── scriber-forge.json ← autonomous-exec config for /forge
-│   └── scriber-context.md ← phase snapshot
-├── src/                   ← Next.js app (Scriber + tool API routes + UI)
-├── mnemo/                 ← Bun sidecar (Mnemo supervisor agent)
-└── public/
-    └── fallback-diagram.png  ← pre-staged image for live demo
-```
+## Roadmap ideas (not built)
 
-## Status
+- A real participant tile via a meeting-bot provider instead of audio routing for the browser mode.
+- Real long-term memory for Mnemo instead of the mock JSON file.
+- Scriber as a first-class Linear agent identity; retros, planning and demo meeting types.
 
-**2026-05-27** — spec approved, 8 tasks queued, execution in progress via `/yolo`. Submission deadline 6:30 PM PDT tonight.
+## Related repos
 
-## Roadmap (post-hackathon)
+- [scriber-landing](https://github.com/benikigai/scriber-landing) — the original static landing page. Superseded: `usescriber.com` is now served by this app's own landing route.
 
-- Recall.ai for real "Scriber (AI)" tile in Meet/Zoom participant grid (replace BlackHole)
-- Mem0 / Qdrant for Mnemo's real long-term memory (replace mock JSON)
-- Linear Agent SDK identity (Scriber as a first-class Linear agent)
-- Multi-team support; multi-meeting-type (retros, planning, demos)
+## Credits
 
-## License
-
-Private — hackathon submission. License TBD post-event.
+Built by [Ben Shyong](https://github.com/benikigai). Hackathon hosted by Cerebral Valley and OpenAI. No license file yet; the upstream OpenAI example is MIT-licensed.
